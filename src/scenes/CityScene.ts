@@ -1,0 +1,1901 @@
+import Phaser from 'phaser';
+import { LanguageKingdom, CityInterior, CityBuilding, TILES } from '../types';
+import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePacks, GRASS_B_FRAMES, GRASS_FLOWER_FRAMES, TREE_DEFS, TOWN_B_DECO, createBuildingTextures, getBuildingTextureKey, loadTemplateLibrary, createTemplateVariantTextures, pickBuildingTextureKey } from '../generators/TilesetGenerator';
+import { generateCityInterior, placePublicBuildings } from '../generators/CityGenerator';
+import { expandTemplateVariations } from '../editor/VariationEngine';
+
+// Stepped zoom levels for crisp pixel-art rendering (retro style)
+const CITY_ZOOM_LEVELS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
+// Minimum zoom index (set dynamically per city to prevent zooming past city edges)
+let cityMinZoomIndex = 0;
+
+// Track zoom by index to avoid float comparison issues
+let cityZoomIndex = 2; // start at 1x
+let cityZoomCooldown = 0; // ms timestamp of last zoom change
+
+function stepCityZoom(direction: number): number {
+  const now = Date.now();
+  // 200ms cooldown prevents trackpad momentum from skipping levels
+  if (now - cityZoomCooldown < 200) return CITY_ZOOM_LEVELS[cityZoomIndex];
+  cityZoomCooldown = now;
+
+  if (direction > 0) {
+    // Zoom out — clamp to dynamic minimum (city must fill viewport)
+    cityZoomIndex = Math.max(cityMinZoomIndex, cityZoomIndex - 1);
+  } else {
+    // Zoom in
+    cityZoomIndex = Math.min(CITY_ZOOM_LEVELS.length - 1, cityZoomIndex + 1);
+  }
+  return CITY_ZOOM_LEVELS[cityZoomIndex];
+}
+
+// Building rank colors for labels (8 tiers)
+const RANK_COLORS: Record<string, string> = {
+  citadel: '#ffd700',
+  castle: '#e8c252',
+  palace: '#d4a856',
+  keep: '#c8a853',
+  manor: '#b89850',
+  guild: '#a89060',
+  cottage: '#988068',
+  hovel: '#887755',
+};
+
+const RANK_ICONS: Record<string, string> = {
+  citadel: '🏰',
+  castle: '🏯',
+  palace: '🏛',
+  keep: '⛪',
+  manor: '🏪',
+  guild: '🏠',
+  cottage: '🛖',
+  hovel: '⛺',
+};
+
+// Simple seeded PRNG
+function seededRandom(seed: number) {
+  return () => {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Citizen sprite definitions — Minifolks villagers pack
+// Each spritesheet is 192px wide (6 cols × 32px), 5-7 rows of 32px frames
+// Row 0: idle front, Row 1: walk down, Row 2: walk side, Row 3: idle back / walk up
+const CITIZEN_SPRITE_DEFS = [
+  { key: 'citizen-queen', file: '/assets/citizens/MiniQueen.png' },
+  { key: 'citizen-noble-m', file: '/assets/citizens/MiniNobleMan.png' },
+  { key: 'citizen-noble-w', file: '/assets/citizens/MiniNobleWoman.png' },
+  { key: 'citizen-princess', file: '/assets/citizens/MiniPrincess.png' },
+  { key: 'citizen-villager-m', file: '/assets/citizens/MiniVillagerMan.png' },
+  { key: 'citizen-villager-w', file: '/assets/citizens/MiniVillagerWoman.png' },
+  { key: 'citizen-peasant', file: '/assets/citizens/MiniPeasant.png' },
+  { key: 'citizen-worker', file: '/assets/citizens/MiniWorker.png' },
+  { key: 'citizen-old-m', file: '/assets/citizens/MiniOldMan.png' },
+  { key: 'citizen-old-w', file: '/assets/citizens/MiniOldWoman.png' },
+];
+
+interface WalkingCitizen {
+  sprite: Phaser.GameObjects.Sprite;
+  nameLabel: Phaser.GameObjects.Text;
+  key: string;
+  currentTile: [number, number];
+  targetTile: [number, number] | null;
+  speed: number;      // pixels per second
+  waitTimer: number;  // ms until next move
+  login: string;
+}
+
+export class CityScene extends Phaser.Scene {
+  private city!: CityInterior;
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
+  private buildingLabels: { text: Phaser.GameObjects.Text; rank: string; buildingIndex: number }[] = [];
+  private lastZoom = -1;
+  private highlightUser: string | null = null;
+  // Store data for transitioning back
+  private returnData: any = null;
+  // Walking citizen NPCs
+  private citizenSprites: WalkingCitizen[] = [];
+  private cityTerrain: number[][] = [];
+  private cityW = 0;
+  private cityH = 0;
+  // Building sprite refs (for async template texture swapping + hover)
+  private buildingSpriteRefs: { sprite: Phaser.GameObjects.Image; rank: string; seed: number; buildingIndex: number }[] = [];
+  private templateVariantsByRank: Map<string, string[]> | null = null;
+  // Hover tooltip
+  private hoverTooltip!: Phaser.GameObjects.Container;
+  private hoverTooltipBg!: Phaser.GameObjects.Graphics;
+  private hoverTooltipText!: Phaser.GameObjects.Text;
+  private hoveredBuildingIndex = -1; // track which building's always-on label to hide
+  // Track DOM event listeners for cleanup on scene switch
+  private domListeners: { el: HTMLElement; event: string; handler: EventListener }[] = [];
+
+  constructor() {
+    super({ key: 'CityScene' });
+  }
+
+  /** Track a DOM event listener for automatic cleanup on scene shutdown */
+  private trackListener(el: HTMLElement | null, event: string, handler: EventListener) {
+    if (!el) return;
+    el.addEventListener(event, handler);
+    this.domListeners.push({ el, event, handler });
+  }
+
+  private cleanupListeners() {
+    for (const { el, event, handler } of this.domListeners) {
+      el.removeEventListener(event, handler);
+    }
+    this.domListeners = [];
+  }
+
+  create() {
+    try {
+      // Clean up listeners from previous lifecycle
+      this.cleanupListeners();
+      this.events.once('shutdown', () => this.cleanupListeners());
+
+      const data = this.scene.settings.data as {
+        kingdom: LanguageKingdom;
+        spritePacks?: SpritePacks;
+        highlightUser?: string;
+        focusRepo?: string; // full_name like "facebook/react" — zoom to this building
+        returnData?: any; // data needed to rebuild world scene
+      };
+
+      this.highlightUser = data.highlightUser?.toLowerCase() || null;
+      this.returnData = data.returnData;
+      const focusRepo = data.focusRepo?.toLowerCase() || null;
+
+      // Reset arrays (scene may be restarted)
+      this.buildingLabels = [];
+      this.citizenSprites = [];
+      this.buildingSpriteRefs = [];
+      this.templateVariantsByRank = null;
+      this.lastZoom = -1;
+
+      // Generate the city interior
+      this.city = generateCityInterior(data.kingdom);
+      const { width: W, height: H, terrain, buildings, citizens } = this.city;
+
+      // ── Generate tileset from sprite packs ──
+      const spritePacks = data.spritePacks;
+      if (!this.textures.exists('tileset')) {
+        const tilesetCanvas = generateTileset(spritePacks);
+        this.textures.addCanvas('tileset', tilesetCanvas);
+      }
+
+      // Register decoration spritesheets from sprite packs
+      let hasDecoSprites = false;
+      if (spritePacks?.grassBImg && spritePacks.grassBImg.width > 0) {
+        if (!this.textures.exists('grass-b')) {
+          try {
+            this.textures.addSpriteSheet('grass-b', spritePacks.grassBImg, {
+              frameWidth: 16, frameHeight: 16, spacing: 0, margin: 0,
+            });
+          } catch (e) { console.error('[CityScene] Failed to register grass-b:', e); }
+        }
+        hasDecoSprites = true;
+      }
+      if (spritePacks?.grassFlowersImg && spritePacks.grassFlowersImg.width > 0) {
+        if (!this.textures.exists('grass-flowers')) {
+          try {
+            this.textures.addSpriteSheet('grass-flowers', spritePacks.grassFlowersImg, {
+              frameWidth: 16, frameHeight: 16, spacing: 0, margin: 0,
+            });
+          } catch (e) { console.error('[CityScene] Failed to register grass-flowers:', e); }
+        }
+      }
+      // Town B decorations (signs, benches, lamps, fences)
+      if (spritePacks?.townBImg && spritePacks.townBImg.width > 0) {
+        if (!this.textures.exists('town-b')) {
+          try {
+            this.textures.addSpriteSheet('town-b', spritePacks.townBImg, {
+              frameWidth: 16, frameHeight: 16, spacing: 0, margin: 0,
+            });
+          } catch (e) { console.error('[CityScene] Failed to register town-b:', e); }
+        }
+      }
+      // Create 2x2 tree textures from Trees.png
+      if (spritePacks?.grassTreesImg && spritePacks.grassTreesImg.width > 0) {
+        for (const def of TREE_DEFS) {
+          const key = `tree-${def.name}`;
+          if (!this.textures.exists(key)) {
+            const tc = document.createElement('canvas');
+            tc.width = 32; tc.height = 32;
+            const tctx = tc.getContext('2d')!;
+            tctx.imageSmoothingEnabled = false;
+            const img = spritePacks.grassTreesImg;
+            tctx.drawImage(img, def.col * 16, 0, 16, 16, 0, 0, 16, 16);
+            tctx.drawImage(img, (def.col + 1) * 16, 0, 16, 16, 16, 0, 16, 16);
+            tctx.drawImage(img, def.col * 16, 16, 16, 16, 0, 16, 16, 16);
+            tctx.drawImage(img, (def.col + 1) * 16, 16, 16, 16, 16, 16, 16, 16);
+            this.textures.addCanvas(key, tc);
+          }
+        }
+      }
+
+      // ── Register building textures from town_B ──
+      if (spritePacks?.townBImg && spritePacks.townBImg.width > 0) {
+        const bldgTextures = createBuildingTextures(spritePacks.townBImg);
+        for (const [key, canvas] of bldgTextures) {
+          if (!this.textures.exists(key)) {
+            this.textures.addCanvas(key, canvas);
+          }
+        }
+      }
+
+      // ── Replace building tiles in terrain with base tile for clean ground ──
+      const baseTile = terrain[3]?.[3] ?? TILES.GRASS; // sample a non-border tile
+      for (const b of buildings) {
+        for (let dy = 0; dy < b.height; dy++) {
+          for (let dx = 0; dx < b.width; dx++) {
+            const tx = b.x + dx, ty = b.y + dy;
+            if (ty >= 0 && ty < H && tx >= 0 && tx < W) {
+              terrain[ty][tx] = baseTile;
+            }
+          }
+        }
+      }
+
+      // ── Tilemap ──
+      const map = this.make.tilemap({
+        tileWidth: TILE_SIZE,
+        tileHeight: TILE_SIZE,
+        width: W,
+        height: H,
+      });
+      const ts = map.addTilesetImage('tileset', 'tileset', TILE_SIZE, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING)!;
+      const layer = map.createBlankLayer('terrain', ts, 0, 0, W, H)!;
+      layer.putTilesAt(terrain, 0, 0);
+
+      // ── Decorations on forest/grass tiles ──
+      if (hasDecoSprites) {
+        this.placeDecorations(terrain, W, H, buildings);
+      }
+
+      // ── Building sprite overlays (composed multi-tile buildings) ──
+      this.placeBuildingSprites(buildings, H);
+
+      // ── Async: load template library → generate variations → swap sprites ──
+      this.loadAndApplyTemplates(spritePacks, buildings, H);
+
+      // ── Citizen NPCs walking the streets ──
+      this.cityTerrain = terrain;
+      this.cityW = W;
+      this.cityH = H;
+
+      // Load citizen sprites on-demand (not in preload, to avoid lifecycle issues)
+      let needsLoad = false;
+      for (const def of CITIZEN_SPRITE_DEFS) {
+        if (!this.textures.exists(def.key)) {
+          this.load.spritesheet(def.key, def.file, { frameWidth: 32, frameHeight: 32 });
+          needsLoad = true;
+        }
+      }
+      if (needsLoad) {
+        this.load.once('complete', () => {
+          this.createCitizenAnimations();
+          this.spawnCitizens(terrain, W, H);
+        });
+        this.load.start();
+      } else {
+        this.createCitizenAnimations();
+        this.spawnCitizens(terrain, W, H);
+      }
+
+      // ── City name label at top (rendered at 4x for crisp text) ──
+      const titleLabelScale = 4;
+      const titleLabel = this.add.text(
+        (W / 2) * TILE_SIZE,
+        3 * TILE_SIZE,
+        `Kingdom of ${this.city.language}` +
+          (this.city.king ? `\n👑 ${this.city.king.login}` : ''),
+        {
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: `${20 * titleLabelScale}px`,
+          color: '#ffd700',
+          stroke: '#000000',
+          strokeThickness: 7 * titleLabelScale,
+          align: 'center',
+        }
+      );
+      titleLabel.setScale(1 / titleLabelScale);
+      titleLabel.setOrigin(0.5, 0.5);
+      titleLabel.setDepth(12);
+      this.buildingLabels.push({ text: titleLabel, rank: 'castle', buildingIndex: -1 });
+
+      // ── Building labels (compact, on-building, only for major buildings) ──
+      for (let bi = 0; bi < buildings.length; bi++) {
+        const b = buildings[bi];
+        const centerX = (b.x + b.width / 2) * TILE_SIZE;
+        const bottomY = (b.y + b.height) * TILE_SIZE - 2;
+
+        // Public/civic buildings get a subtle label on the building
+        if (b.isPublic) {
+          if (b.publicName) {
+            const labelScale = 4;
+            const label = this.add.text(centerX, bottomY, b.publicName, {
+              fontFamily: "'Silkscreen', monospace",
+              fontSize: `${10 * labelScale}px`,
+              color: '#c8c0a0',
+              stroke: '#000000',
+              strokeThickness: 3 * labelScale,
+              align: 'center',
+              backgroundColor: '#00000088',
+              padding: { x: 3 * labelScale, y: 2 * labelScale },
+            });
+            label.setScale(1 / labelScale);
+            label.setOrigin(0.5, 1);
+            label.setDepth(10);
+            this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: bi });
+          }
+          continue;
+        }
+
+        if (!b.repoMetrics) continue;
+
+        const isUserRepo = this.isUserBuilding(b);
+
+        // Only show always-on labels for major buildings (castle+ and user repos)
+        const isMajor = b.rank === 'citadel' || b.rank === 'castle' || b.rank === 'palace' || b.rank === 'keep';
+        if (!isMajor && !isUserRepo) {
+          // Gold glow ring for user's buildings
+          continue;
+        }
+
+        const color = isUserRepo ? '#ffd700' : (RANK_COLORS[b.rank] || '#e8d5a3');
+        const displayName = b.repoMetrics.repo.name;
+
+        // Render labels at 4x resolution, positioned on the building body
+        const labelScale = 4;
+        const label = this.add.text(centerX, bottomY, displayName, {
+          fontFamily: "'Silkscreen', monospace",
+          fontSize: `${12 * labelScale}px`,
+          color,
+          stroke: '#000000',
+          strokeThickness: 4 * labelScale,
+          align: 'center',
+          backgroundColor: '#00000088',
+          padding: { x: 3 * labelScale, y: 2 * labelScale },
+        });
+        label.setScale(1 / labelScale);
+        label.setOrigin(0.5, 1);
+        label.setDepth(10);
+        this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: bi });
+
+        // Gold glow ring for user's buildings
+        if (isUserRepo) {
+          const ring = this.add.circle(
+            (b.x + b.width / 2) * TILE_SIZE,
+            (b.y + b.height / 2) * TILE_SIZE,
+            Math.max(b.width, b.height) * TILE_SIZE * 0.7,
+            0xffd700, 0
+          );
+          ring.setStrokeStyle(2, 0xffd700, 0.8);
+          ring.setDepth(9);
+        }
+      }
+
+      // ── Hover tooltip (shown when mousing over any building) ──
+      this.createHoverTooltip();
+
+      // ── Countryside background (grass + trees beyond city walls) ──
+      // Calculate padding so countryside fills the viewport even at max zoom-out (0.5x)
+      const minZoom = CITY_ZOOM_LEVELS[0]; // 0.5x
+      const neededWorldW = window.innerWidth / minZoom;
+      const neededWorldH = window.innerHeight / minZoom;
+      const extraW = Math.max(0, (neededWorldW - W * TILE_SIZE) / 2);
+      const extraH = Math.max(0, (neededWorldH - H * TILE_SIZE) / 2);
+      const padPx = Math.ceil(Math.max(extraW, extraH)) + TILE_SIZE * 4; // + a few tiles buffer
+      const COUNTRYSIDE_PAD_TILES = Math.ceil(padPx / TILE_SIZE);
+      // Solid grass background behind everything
+      const bgRect = this.add.rectangle(
+        (W * TILE_SIZE) / 2, (H * TILE_SIZE) / 2,
+        W * TILE_SIZE + padPx * 2, H * TILE_SIZE + padPx * 2,
+        0x4a8c3f, // grass green
+      );
+      bgRect.setDepth(-2);
+      // Scatter countryside trees and bushes in the ring around the city
+      this.placeCountryside(W, H, COUNTRYSIDE_PAD_TILES);
+
+      // ── Camera ── total area includes city + countryside ring
+      const totalW = W * TILE_SIZE + padPx * 2;
+      const totalH = H * TILE_SIZE + padPx * 2;
+      this.cameras.main.setBounds(
+        -padPx, -padPx,
+        totalW, totalH,
+      );
+      this.cameras.main.centerOn((W / 2) * TILE_SIZE, (H / 2) * TILE_SIZE);
+      this.cameras.main.setRoundPixels(true);
+
+      // Allow zooming out to 0.5x — countryside covers everything, no black void
+      cityMinZoomIndex = 0;
+      // Start at 1x zoom
+      cityZoomIndex = 2;
+      this.cameras.main.setZoom(CITY_ZOOM_LEVELS[cityZoomIndex]);
+
+      // ── Deep link: focus on a specific repo building ──
+      if (focusRepo) {
+        const targetBuilding = buildings.find(b =>
+          b.repoMetrics?.repo.full_name.toLowerCase() === focusRepo
+        );
+        if (targetBuilding) {
+          // Center camera on the building
+          const bx = (targetBuilding.x + targetBuilding.width / 2) * TILE_SIZE;
+          const by = (targetBuilding.y + targetBuilding.height / 2) * TILE_SIZE;
+          this.cameras.main.centerOn(bx, by);
+          // Zoom in close
+          cityZoomIndex = 4; // 2x zoom
+          this.cameras.main.setZoom(CITY_ZOOM_LEVELS[cityZoomIndex]);
+          // Add a pulsing highlight ring
+          const ring = this.add.graphics();
+          ring.lineStyle(3, 0xff4444, 1);
+          ring.strokeRect(
+            targetBuilding.x * TILE_SIZE - 4,
+            targetBuilding.y * TILE_SIZE - 4,
+            targetBuilding.width * TILE_SIZE + 8,
+            targetBuilding.height * TILE_SIZE + 8,
+          );
+          ring.setDepth(100);
+          this.tweens.add({
+            targets: ring,
+            alpha: { from: 1, to: 0.3 },
+            duration: 800,
+            yoyo: true,
+            repeat: -1,
+          });
+          console.log(`[Deep link] Focused on ${focusRepo} at (${targetBuilding.x}, ${targetBuilding.y})`);
+        }
+      }
+
+      // ── Input ──
+      this.cursors = this.input.keyboard!.createCursorKeys();
+      this.wasd = {
+        W: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+        A: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+        S: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+        D: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+      };
+
+      this.input.on('wheel', (_p: any, _g: any, _dx: number, deltaY: number) => {
+        this.cameras.main.setZoom(stepCityZoom(deltaY));
+      });
+
+      // Click on buildings
+      let dragStartX = 0, dragStartY = 0;
+      let isDragging = false;
+      let camStartX = 0, camStartY = 0;
+
+      this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        dragStartX = p.x; dragStartY = p.y;
+        camStartX = this.cameras.main.scrollX;
+        camStartY = this.cameras.main.scrollY;
+        isDragging = false;
+      });
+      this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+        if (!p.isDown) return;
+        const dx = p.x - dragStartX, dy = p.y - dragStartY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) isDragging = true;
+        if (isDragging) {
+          this.cameras.main.scrollX = camStartX - dx / this.cameras.main.zoom;
+          this.cameras.main.scrollY = camStartY - dy / this.cameras.main.zoom;
+        }
+      });
+      this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        if (isDragging) { isDragging = false; return; }
+        const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const tx = Math.floor(wp.x / TILE_SIZE);
+        const ty = Math.floor(wp.y / TILE_SIZE);
+
+        // Check if clicked near a citizen NPC first
+        let clickedCitizen: WalkingCitizen | null = null;
+        let citizenDist = Infinity;
+        for (const c of this.citizenSprites) {
+          const dx = c.sprite.x - wp.x;
+          const dy = c.sprite.y - wp.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < citizenDist && d < TILE_SIZE * 1.5) {
+            citizenDist = d;
+            clickedCitizen = c;
+          }
+        }
+
+        if (clickedCitizen) {
+          this.showCitizenInfo(clickedCitizen);
+          return;
+        }
+
+        // Find closest building
+        let closestBuilding: CityBuilding | null = null;
+        let closestDist = Infinity;
+        for (const b of buildings) {
+          const bcx = b.x + b.width / 2;
+          const bcy = b.y + b.height / 2;
+          const d = Math.abs(bcx - tx) + Math.abs(bcy - ty);
+          if (d < closestDist && d <= 4) {
+            closestDist = d;
+            closestBuilding = b;
+          }
+        }
+
+        if (closestBuilding) {
+          this.showBuildingInfo(closestBuilding);
+        } else {
+          this.hideInfoPanel();
+        }
+      });
+
+      // ── Build UI ──
+      this.buildCityLegend(buildings);
+      this.addBackButton();
+      this.updateControlsHint();
+
+      const el = document.getElementById('loading');
+      if (el) el.style.display = 'none';
+
+    } catch (err) {
+      console.error('[CityScene] create() error:', err);
+    }
+  }
+
+  private isUserBuilding(b: CityBuilding): boolean {
+    if (!this.highlightUser || !b.repoMetrics) return false;
+    const owner = b.repoMetrics.repo.full_name.split('/')[0].toLowerCase();
+    return owner === this.highlightUser;
+  }
+
+  private placeBuildingSprites(buildings: CityBuilding[], mapHeight: number) {
+    this.buildingSpriteRefs = [];
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      // Use building index as seed for variety
+      const seed = i * 7 + b.x * 3 + b.y;
+      const texKey = this.templateVariantsByRank
+        ? pickBuildingTextureKey(b.rank, seed, this.templateVariantsByRank)
+        : getBuildingTextureKey(b.rank, seed);
+
+      if (!this.textures.exists(texKey)) continue;
+
+      // Position: bottom of sprite aligns with bottom of building footprint
+      // Sprite is centered horizontally on the building footprint
+      const footCenterX = (b.x + b.width / 2) * TILE_SIZE;
+      const footBottomY = (b.y + b.height) * TILE_SIZE;
+
+      const sprite = this.add.image(footCenterX, footBottomY, texKey);
+      sprite.setOrigin(0.5, 1); // anchor at bottom-center
+      // Y-sort depth: buildings further down render on top
+      sprite.setDepth(4 + (b.y + b.height) / mapHeight * 2);
+
+      // Make interactive for hover tooltip
+      sprite.setInteractive({ useHandCursor: true });
+      sprite.on('pointerover', () => this.showHoverTooltip(i));
+      sprite.on('pointerout', () => this.hideHoverTooltip());
+
+      this.buildingSpriteRefs.push({ sprite, rank: b.rank, seed, buildingIndex: i });
+    }
+  }
+
+  // ── Hover tooltip system ─────────────────────────────────────
+
+  private createHoverTooltip() {
+    // Reusable tooltip container — hidden by default
+    this.hoverTooltipBg = this.add.graphics();
+    const labelScale = 4;
+    this.hoverTooltipText = this.add.text(0, 0, '', {
+      fontFamily: "'Silkscreen', monospace",
+      fontSize: `${12 * labelScale}px`,
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3 * labelScale,
+      align: 'center',
+    });
+    this.hoverTooltipText.setScale(1 / labelScale);
+    this.hoverTooltipText.setOrigin(0.5, 1);
+
+    this.hoverTooltip = this.add.container(0, 0, [
+      this.hoverTooltipBg,
+      this.hoverTooltipText,
+    ]);
+    this.hoverTooltip.setDepth(15);
+    this.hoverTooltip.setVisible(false);
+  }
+
+  private showHoverTooltip(buildingIndex: number) {
+    const b = this.city.buildings[buildingIndex];
+    if (!b) return;
+
+    // Hide any always-on label for this building to avoid duplicate text
+    this.hoveredBuildingIndex = buildingIndex;
+    for (const lbl of this.buildingLabels) {
+      if (lbl.buildingIndex === buildingIndex) {
+        lbl.text.setVisible(false);
+      }
+    }
+
+    let name: string;
+    let detail = '';
+    let nameColor = '#ffffff';
+
+    if (b.isPublic && b.publicName) {
+      name = b.publicName;
+      nameColor = '#c8c0a0';
+    } else if (b.repoMetrics) {
+      name = b.repoMetrics.repo.name;
+      const stars = b.repoMetrics.repo.stargazers_count;
+      if (stars > 0) {
+        detail = `  ★ ${stars >= 1000 ? Math.round(stars / 1000) + 'k' : stars}`;
+      }
+      const isUserRepo = this.isUserBuilding(b);
+      nameColor = isUserRepo ? '#ffd700' : (RANK_COLORS[b.rank] || '#e8d5a3');
+    } else {
+      return; // no useful info
+    }
+
+    const labelScale = 4;
+    const displayText = name + detail;
+    this.hoverTooltipText.setText(displayText);
+    this.hoverTooltipText.setColor(nameColor);
+
+    // Position tooltip at the bottom of the building
+    const cx = (b.x + b.width / 2) * TILE_SIZE;
+    const cy = (b.y + b.height) * TILE_SIZE + 2;
+    this.hoverTooltipText.setPosition(0, 0);
+
+    // Measure text for background (account for 4x scale)
+    const textW = this.hoverTooltipText.width / labelScale;
+    const textH = this.hoverTooltipText.height / labelScale;
+    const padX = 4;
+    const padY = 2;
+
+    this.hoverTooltipBg.clear();
+    this.hoverTooltipBg.fillStyle(0x000000, 0.75);
+    this.hoverTooltipBg.fillRoundedRect(
+      -textW / 2 - padX,
+      -textH - padY,
+      textW + padX * 2,
+      textH + padY * 2,
+      3
+    );
+
+    this.hoverTooltip.setPosition(cx, cy);
+    this.hoverTooltip.setVisible(true);
+
+    // Scale with zoom
+    const zoom = this.cameras.main.zoom;
+    const scale = Phaser.Math.Clamp(1 / zoom, 0.15, 2.0);
+    this.hoverTooltip.setScale(scale);
+  }
+
+  private hideHoverTooltip() {
+    if (this.hoverTooltip) {
+      this.hoverTooltip.setVisible(false);
+    }
+    // Restore always-on label for the previously hovered building
+    if (this.hoveredBuildingIndex >= 0) {
+      for (const lbl of this.buildingLabels) {
+        if (lbl.buildingIndex === this.hoveredBuildingIndex) {
+          lbl.text.setVisible(true);
+        }
+      }
+      this.hoveredBuildingIndex = -1;
+    }
+  }
+
+  /**
+   * Async-load template library, generate all visual variations
+   * (roof color swaps × mirrors × decoration swaps), register textures,
+   * update existing building sprites, and place public/civic buildings.
+   */
+  private async loadAndApplyTemplates(
+    spritePacks: SpritePacks | undefined,
+    buildings: CityBuilding[],
+    mapHeight: number,
+  ) {
+    if (!spritePacks?.townBImg) return;
+
+    try {
+      const templates = await loadTemplateLibrary();
+      if (templates.length === 0) return;
+
+      // Split templates into repo-buildings vs public/civic
+      const repoTemplates = templates.filter(t => !t.tags?.includes('public'));
+      const publicTemplates = templates.filter(t => t.tags?.includes('public'));
+
+      // Expand repo templates into all variations and render to canvases
+      if (repoTemplates.length > 0) {
+        const { textures, variantsByRank } = createTemplateVariantTextures(spritePacks, repoTemplates);
+
+        for (const [key, canvas] of textures) {
+          if (!this.textures.exists(key)) {
+            this.textures.addCanvas(key, canvas);
+          }
+        }
+
+        this.templateVariantsByRank = variantsByRank;
+
+        // Swap building sprites to use template textures where available
+        for (const ref of this.buildingSpriteRefs) {
+          const newKey = pickBuildingTextureKey(ref.rank, ref.seed, variantsByRank);
+          if (newKey !== ref.sprite.texture.key && this.textures.exists(newKey)) {
+            ref.sprite.setTexture(newKey);
+          }
+        }
+
+        const totalVariants = [...variantsByRank.values()].reduce((n, arr) => n + arr.length, 0);
+        const rankDetail = [...variantsByRank.entries()].map(([r, keys]) => `${r}(${keys.length})`).join(', ');
+        console.log(
+          `[CityScene] Templates: ${repoTemplates.length} base → ${totalVariants} variants | ${rankDetail}`,
+        );
+
+        // Log how many buildings could receive template textures
+        let swapped = 0;
+        for (const ref of this.buildingSpriteRefs) {
+          if (variantsByRank.has(ref.rank)) swapped++;
+        }
+        console.log(`[CityScene] Buildings eligible for template textures: ${swapped}/${this.buildingSpriteRefs.length}`);
+      }
+
+      // ── Place public/civic buildings ──
+      if (publicTemplates.length > 0) {
+        // Generate all visual variations for public templates
+        const publicVariants = expandTemplateVariations(publicTemplates);
+
+        // Render public variant textures
+        const { textures: pubTextures } = createTemplateVariantTextures(spritePacks, publicTemplates);
+        for (const [key, canvas] of pubTextures) {
+          if (!this.textures.exists(key)) {
+            this.textures.addCanvas(key, canvas);
+          }
+        }
+
+        // Place civic buildings into the existing city
+        const newBuildings = placePublicBuildings(this.city, publicVariants);
+
+        // Create sprites and labels for new civic buildings
+        const civicBuildingStartIndex = this.city.buildings.length - newBuildings.length;
+        for (let ni = 0; ni < newBuildings.length; ni++) {
+          const b = newBuildings[ni];
+          const globalIndex = civicBuildingStartIndex + ni;
+          // Use the template's own texture key if assigned
+          const texKey = b.templateKey || '';
+          if (texKey && this.textures.exists(texKey)) {
+            const footCenterX = (b.x + b.width / 2) * TILE_SIZE;
+            const footBottomY = (b.y + b.height) * TILE_SIZE;
+            const sprite = this.add.image(footCenterX, footBottomY, texKey);
+            sprite.setOrigin(0.5, 1);
+            sprite.setDepth(4 + (b.y + b.height) / mapHeight * 2);
+            // Make interactive for hover
+            sprite.setInteractive({ useHandCursor: true });
+            sprite.on('pointerover', () => this.showHoverTooltip(globalIndex));
+            sprite.on('pointerout', () => this.hideHoverTooltip());
+          }
+
+          // Add civic label on the building
+          if (b.publicName) {
+            const centerX = (b.x + b.width / 2) * TILE_SIZE;
+            const bottomY = (b.y + b.height) * TILE_SIZE - 2;
+            const labelScale = 4;
+            const label = this.add.text(centerX, bottomY, b.publicName, {
+              fontFamily: "'Silkscreen', monospace",
+              fontSize: `${10 * labelScale}px`,
+              color: '#c8c0a0',
+              stroke: '#000000',
+              strokeThickness: 3 * labelScale,
+              align: 'center',
+              backgroundColor: '#00000088',
+              padding: { x: 3 * labelScale, y: 2 * labelScale },
+            });
+            label.setScale(1 / labelScale);
+            label.setOrigin(0.5, 1);
+            label.setDepth(10);
+            this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: globalIndex });
+          }
+        }
+
+        // Rebuild legend to include civic buildings
+        if (newBuildings.length > 0) {
+          this.buildCityLegend(this.city.buildings);
+        }
+
+        console.log(
+          `[CityScene] Public templates: ${publicTemplates.length} base → ${newBuildings.length} civic buildings placed`,
+        );
+      }
+    } catch (e) {
+      console.warn('[CityScene] Template loading skipped:', e);
+    }
+  }
+
+  // ── Countryside: grass, trees, bushes beyond city walls ──
+  private placeCountryside(W: number, H: number, pad: number) {
+    const rand = seededRandom(7777);
+    const cityPx = W * TILE_SIZE;
+    const cityPy = H * TILE_SIZE;
+    const padPx = pad * TILE_SIZE;
+
+    // Scatter trees and bushes in the countryside ring around the city
+    const decoCount = Math.min(pad * 10, 600); // cap decorations for perf
+    for (let i = 0; i < decoCount; i++) {
+      const angle = rand() * Math.PI * 2;
+      const dist = (2 + rand() * (pad - 3)) * TILE_SIZE;
+      // Pick a random edge: top, bottom, left, right, or corners
+      let px: number, py: number;
+      const side = Math.floor(rand() * 4);
+      if (side === 0) { // top
+        px = rand() * (cityPx + padPx * 2) - padPx;
+        py = -rand() * padPx;
+      } else if (side === 1) { // bottom
+        px = rand() * (cityPx + padPx * 2) - padPx;
+        py = cityPy + rand() * padPx;
+      } else if (side === 2) { // left
+        px = -rand() * padPx;
+        py = rand() * (cityPy + padPx * 2) - padPx;
+      } else { // right
+        px = cityPx + rand() * padPx;
+        py = rand() * (cityPy + padPx * 2) - padPx;
+      }
+
+      const r = rand();
+      if (r < 0.5) {
+        // Tree
+        const treeDef = TREE_DEFS[Math.floor(rand() * TREE_DEFS.length)];
+        const key = `tree-${treeDef.name}`;
+        if (this.textures.exists(key)) {
+          const tree = this.add.image(px, py, key);
+          tree.setDepth(-1);
+        }
+      } else if (r < 0.75 && this.textures.exists('grass-b')) {
+        // Bush
+        const frame = GRASS_B_FRAMES.bushes[Math.floor(rand() * GRASS_B_FRAMES.bushes.length)];
+        const bush = this.add.image(px, py, 'grass-b', frame);
+        bush.setDepth(-1);
+      } else if (this.textures.exists('grass-flowers')) {
+        // Flowers
+        const frame = GRASS_FLOWER_FRAMES.allSmall[Math.floor(rand() * GRASS_FLOWER_FRAMES.allSmall.length)];
+        const flower = this.add.image(px, py, 'grass-flowers', frame);
+        flower.setOrigin(0.5, 0.5);
+        flower.setDepth(-1);
+      }
+    }
+  }
+
+  private placeDecorations(terrain: number[][], W: number, H: number, buildings: CityBuilding[]) {
+    const rand = seededRandom(12345);
+
+    // PERF: Use flat grid instead of string-keyed Set for building zone checks
+    const buildingZone = new Uint8Array(W * H);
+    for (const b of buildings) {
+      for (let dy = -1; dy <= b.height; dy++) {
+        for (let dx = -1; dx <= b.width; dx++) {
+          const px = b.x + dx, py = b.y + dy;
+          if (px >= 0 && px < W && py >= 0 && py < H) buildingZone[py * W + px] = 1;
+        }
+      }
+    }
+
+    const hasGrassB = this.textures.exists('grass-b');
+    const hasFlowers = this.textures.exists('grass-flowers');
+    const hasTownB = this.textures.exists('town-b');
+
+    const greenTreeKeys = TREE_DEFS.filter(d => !d.name.startsWith('dead') && d.name !== 'palm')
+      .map(d => `tree-${d.name}`).filter(k => this.textures.exists(k));
+
+    // Helper to check if a neighbor tile is of a given type
+    const tileAt = (x: number, y: number) =>
+      x >= 0 && x < W && y >= 0 && y < H ? terrain[y][x] : -1;
+    const isRoad = (x: number, y: number) => tileAt(x, y) === TILES.ROAD;
+    const isGrass = (x: number, y: number) => {
+      const t = tileAt(x, y);
+      return t === TILES.GRASS || t === TILES.GRASS_DARK ||
+        (t >= TILES.CITY_GRASS_1 && t <= TILES.CITY_GRASS_6);
+    };
+
+    // Identify road-adjacent grass tiles (good for street trees, fences, lamps)
+    // PERF: Use flat grid instead of string-keyed Set
+    const roadAdjGrass = new Uint8Array(W * H);
+    const midX = Math.floor(W / 2);
+    const midY = Math.floor(H / 2);
+
+    for (let y = 2; y < H - 2; y++) {
+      for (let x = 2; x < W - 2; x++) {
+        if (isGrass(x, y) && !buildingZone[y * W + x]) {
+          if (isRoad(x - 1, y) || isRoad(x + 1, y) || isRoad(x, y - 1) || isRoad(x, y + 1)) {
+            roadAdjGrass[y * W + x] = 1;
+          }
+        }
+      }
+    }
+
+    // ── Pass 1: Place structured decorations (lamps at intervals, trees along roads) ──
+    // Place lamp posts at regular intervals along main roads
+    if (hasTownB) {
+      const lampFrames = TOWN_B_DECO.townLamps;
+      for (let y = 4; y < H - 4; y += 3) {
+        for (let x = 4; x < W - 4; x += 3) {
+          if (!isRoad(x, y)) continue;
+          // Place lamp if next to grass (roadside lamp)
+          if (isGrass(x - 1, y) || isGrass(x + 1, y)) {
+            const frame = lampFrames[Math.floor(rand() * lampFrames.length)];
+            const s = this.add.sprite(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'town-b', frame);
+            s.setOrigin(0.5, 0.5);
+            s.setDepth(3 + y / H);
+          }
+        }
+      }
+    }
+
+    // Place potted trees along road-adjacent grass tiles
+    if (hasTownB) {
+      const treeFrames = TOWN_B_DECO.townTrees;
+      for (let y = 2; y < H - 2; y++) {
+        for (let x = 2; x < W - 2; x++) {
+          if (!roadAdjGrass[y * W + x]) continue;
+          if (rand() > 0.12) continue; // ~12% chance
+          const frame = treeFrames[Math.floor(rand() * treeFrames.length)];
+          const s = this.add.sprite(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'town-b', frame);
+          s.setOrigin(0.5, 0.5);
+          s.setDepth(3 + y / H);
+        }
+      }
+    }
+
+    // Place benches near the plaza (within 6 tiles of center)
+    if (hasTownB) {
+      const benchFrames = TOWN_B_DECO.townBenches;
+      for (let y = midY - 6; y <= midY + 6; y++) {
+        for (let x = midX - 6; x <= midX + 6; x++) {
+          if (!isRoad(x, y) || buildingZone[y * W + x]) continue;
+          if (rand() > 0.04) continue;
+          const frame = benchFrames[Math.floor(rand() * benchFrames.length)];
+          const s = this.add.sprite(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 'town-b', frame);
+          s.setOrigin(0.5, 0.5);
+          s.setDepth(3 + y / H);
+        }
+      }
+    }
+
+    // Place flower pots near buildings
+    if (hasTownB) {
+      const flowerFrames = TOWN_B_DECO.townFlowers;
+      for (const b of buildings) {
+        // Place 1-3 flower pots around each building
+        const count = 1 + Math.floor(rand() * 3);
+        for (let i = 0; i < count; i++) {
+          // Pick a random spot adjacent to building
+          const side = Math.floor(rand() * 4);
+          let fx: number, fy: number;
+          if (side === 0) { fx = b.x + Math.floor(rand() * b.width); fy = b.y - 1; }       // above
+          else if (side === 1) { fx = b.x + Math.floor(rand() * b.width); fy = b.y + b.height; } // below
+          else if (side === 2) { fx = b.x - 1; fy = b.y + Math.floor(rand() * b.height); }  // left
+          else { fx = b.x + b.width; fy = b.y + Math.floor(rand() * b.height); }             // right
+
+          if (fx < 0 || fx >= W || fy < 0 || fy >= H) continue;
+          // Only place flower pots on grass, not on roads
+          if (!isGrass(fx, fy)) continue;
+
+          const frame = flowerFrames[Math.floor(rand() * flowerFrames.length)];
+          const s = this.add.sprite(fx * TILE_SIZE + 8, fy * TILE_SIZE + 8, 'town-b', frame);
+          s.setOrigin(0.5, 0.5);
+          s.setDepth(3 + fy / H);
+        }
+      }
+    }
+
+    // Place signs near guild/market buildings
+    if (hasTownB) {
+      const signFrames = TOWN_B_DECO.townSigns;
+      for (const b of buildings) {
+        if (b.rank !== 'guild' && b.rank !== 'cottage') continue;
+        if (rand() > 0.6) continue;
+        // Place sign in front of building (below)
+        const sx = b.x + Math.floor(b.width / 2);
+        const sy = b.y + b.height;
+        if (sy < H && isGrass(sx, sy)) {
+          const frame = signFrames[Math.floor(rand() * signFrames.length)];
+          const s = this.add.sprite(sx * TILE_SIZE + 8, sy * TILE_SIZE + 8, 'town-b', frame);
+          s.setOrigin(0.5, 0.5);
+          s.setDepth(3 + sy / H);
+        }
+      }
+    }
+
+    // ── Pass 2: Scatter natural decorations on terrain ──
+    for (let y = 2; y < H - 2; y++) {
+      for (let x = 2; x < W - 2; x++) {
+        const tile = terrain[y][x];
+        if (buildingZone[y * W + x]) continue;
+
+        const r = rand();
+        const px = x * TILE_SIZE + rand() * 4 - 2;
+        const py = y * TILE_SIZE + rand() * 4 - 2;
+
+        if (tile === TILES.FOREST) {
+          if (r < 0.30 && greenTreeKeys.length > 0) {
+            const key = greenTreeKeys[Math.floor(rand() * greenTreeKeys.length)];
+            const sprite = this.add.sprite(px + 8, py + 8, key);
+            sprite.setOrigin(0.5, 0.5);
+            sprite.setDepth(3 + (y / H) * 2);
+          } else if (r < 0.42 && hasGrassB) {
+            const frame = GRASS_B_FRAMES.bushes[Math.floor(rand() * GRASS_B_FRAMES.bushes.length)];
+            const sprite = this.add.sprite(px + 8, py + 8, 'grass-b', frame);
+            sprite.setOrigin(0.5, 0.5);
+          } else if (r < 0.50 && hasFlowers) {
+            const frame = GRASS_FLOWER_FRAMES.allSmall[Math.floor(rand() * GRASS_FLOWER_FRAMES.allSmall.length)];
+            const sprite = this.add.sprite(px + 8, py + 12, 'grass-flowers', frame);
+            sprite.setOrigin(0.5, 0.5);
+          }
+        } else if (tile === TILES.GRASS_DARK) {
+          if (r < 0.08 && greenTreeKeys.length > 0) {
+            const key = greenTreeKeys[Math.floor(rand() * greenTreeKeys.length)];
+            const sprite = this.add.sprite(px + 8, py + 8, key);
+            sprite.setOrigin(0.5, 0.5);
+            sprite.setDepth(3 + (y / H) * 2);
+          } else if (r < 0.12 && hasGrassB) {
+            const frame = GRASS_B_FRAMES.bushes[Math.floor(rand() * GRASS_B_FRAMES.bushes.length)];
+            const sprite = this.add.sprite(px + 8, py + 8, 'grass-b', frame);
+            sprite.setOrigin(0.5, 0.5);
+          } else if (r < 0.16 && hasFlowers) {
+            const frame = GRASS_FLOWER_FRAMES.allSmall[Math.floor(rand() * GRASS_FLOWER_FRAMES.allSmall.length)];
+            const sprite = this.add.sprite(px + 8, py + 12, 'grass-flowers', frame);
+            sprite.setOrigin(0.5, 0.5);
+          }
+        } else if (tile === TILES.GRASS || (tile >= TILES.CITY_GRASS_1 && tile <= TILES.CITY_GRASS_6)) {
+          if (r < 0.04 && hasFlowers) {
+            const frame = GRASS_FLOWER_FRAMES.allSmall[Math.floor(rand() * GRASS_FLOWER_FRAMES.allSmall.length)];
+            const sprite = this.add.sprite(px + 8, py + 12, 'grass-flowers', frame);
+            sprite.setOrigin(0.5, 0.5);
+          } else if (r < 0.06 && hasGrassB) {
+            const frame = GRASS_B_FRAMES.stonesSmall[Math.floor(rand() * GRASS_B_FRAMES.stonesSmall.length)];
+            const sprite = this.add.sprite(px + 8, py + 8, 'grass-b', frame);
+            sprite.setOrigin(0.5, 0.5);
+          }
+        }
+      }
+    }
+  }
+
+  update(_time: number, delta: number) {
+    const cam = this.cameras.main;
+    const speed = 4 / cam.zoom;
+    if (this.cursors.left.isDown || this.wasd.A.isDown) cam.scrollX -= speed;
+    if (this.cursors.right.isDown || this.wasd.D.isDown) cam.scrollX += speed;
+    if (this.cursors.up.isDown || this.wasd.W.isDown) cam.scrollY -= speed;
+    if (this.cursors.down.isDown || this.wasd.S.isDown) cam.scrollY += speed;
+
+    // ── Move citizen NPCs ──
+    this.updateCitizens(delta);
+
+    // Scale-aware labels: render at 4x, clamp effective screen size
+    const zoom = cam.zoom;
+    if (Math.abs(zoom - this.lastZoom) > 0.01) {
+      this.lastZoom = zoom;
+      const labelScale = 4;
+      // Clamp so labels never get too huge (zoomed out) or too tiny (zoomed in)
+      const effectiveScale = Phaser.Math.Clamp(1 / zoom, 0.15, 2.0) / labelScale;
+
+      // Simplified LOD: only major building labels exist now, minor are hover-only
+      for (const { text, rank, buildingIndex } of this.buildingLabels) {
+        text.setScale(effectiveScale);
+        // Don't re-show a label that's hidden because we're hovering that building
+        if (buildingIndex === this.hoveredBuildingIndex && buildingIndex >= 0) continue;
+
+        const isMajor = rank === 'citadel' || rank === 'castle';
+        const isUpper = rank === 'palace' || rank === 'keep';
+
+        if (zoom < 0.7) {
+          text.setVisible(isMajor);
+          text.setAlpha(isMajor ? 1 : 0);
+        } else if (zoom < 1.2) {
+          text.setVisible(isMajor || isUpper);
+          text.setAlpha(isMajor ? 1 : Phaser.Math.Clamp((zoom - 0.7) / 0.5, 0, 1));
+        } else {
+          text.setVisible(true);
+          text.setAlpha(1);
+        }
+      }
+
+      // Scale hover tooltip with zoom
+      if (this.hoverTooltip?.visible) {
+        const tooltipScale = Phaser.Math.Clamp(1 / zoom, 0.15, 2.0);
+        this.hoverTooltip.setScale(tooltipScale);
+      }
+
+      // Scale citizen name labels
+      for (const c of this.citizenSprites) {
+        c.nameLabel.setScale(effectiveScale);
+        // Fade citizen names in from zoom 1.2→1.8
+        if (zoom < 1.2) {
+          c.nameLabel.setVisible(false);
+        } else {
+          c.nameLabel.setVisible(true);
+          c.nameLabel.setAlpha(Phaser.Math.Clamp((zoom - 1.2) / 0.6, 0, 1));
+        }
+      }
+    }
+  }
+
+  // ── Citizen NPC system ──────────────────────────────────────
+
+  private createCitizenAnimations() {
+    for (const def of CITIZEN_SPRITE_DEFS) {
+      if (!this.textures.exists(def.key)) continue;
+      const prefix = def.key;
+      if (this.anims.exists(`${prefix}-idle`)) continue;
+
+      // Row 0: idle front (3 frames)
+      this.anims.create({
+        key: `${prefix}-idle`,
+        frames: this.anims.generateFrameNumbers(def.key, { frames: [0, 1, 2] }),
+        frameRate: 3,
+        repeat: -1,
+      });
+      // Row 1: walk down (4 frames)
+      this.anims.create({
+        key: `${prefix}-walk-down`,
+        frames: this.anims.generateFrameNumbers(def.key, { frames: [6, 7, 8, 9] }),
+        frameRate: 6,
+        repeat: -1,
+      });
+      // Row 2: walk side/right (4 frames)
+      this.anims.create({
+        key: `${prefix}-walk-right`,
+        frames: this.anims.generateFrameNumbers(def.key, { frames: [12, 13, 14, 15] }),
+        frameRate: 6,
+        repeat: -1,
+      });
+      // Row 3: walk up (3 frames)
+      this.anims.create({
+        key: `${prefix}-walk-up`,
+        frames: this.anims.generateFrameNumbers(def.key, { frames: [18, 19, 20] }),
+        frameRate: 6,
+        repeat: -1,
+      });
+    }
+  }
+
+  private spawnCitizens(terrain: number[][], W: number, H: number) {
+    // Find all road tiles
+    const roadTiles: [number, number][] = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (terrain[y][x] === TILES.ROAD) {
+          roadTiles.push([x, y]);
+        }
+      }
+    }
+    if (roadTiles.length === 0) return;
+
+    // Select top citizens (max 20)
+    const maxCitizens = Math.min(20, this.city.citizens.length, roadTiles.length);
+    const citizensToSpawn = this.city.citizens.slice(0, maxCitizens);
+    const rand = seededRandom(54321);
+
+    for (let i = 0; i < citizensToSpawn.length; i++) {
+      const citizen = citizensToSpawn[i];
+      const startIdx = Math.floor(rand() * roadTiles.length);
+      const [sx, sy] = roadTiles[startIdx];
+
+      const spriteKey = this.getSpriteForCitizen(i, citizensToSpawn.length);
+      if (!this.textures.exists(spriteKey)) continue;
+
+      const px = sx * TILE_SIZE + TILE_SIZE / 2;
+      const py = sy * TILE_SIZE + TILE_SIZE / 2;
+
+      const sprite = this.add.sprite(px, py, spriteKey, 0);
+      sprite.setScale(1.0); // 32px sprite fills ~1 tile (character art fills the frame)
+      sprite.setDepth(7);   // above decorations, below building labels
+      sprite.play(`${spriteKey}-idle`);
+
+      // Name label (visible when zoomed in) — rendered at 4x for crisp text
+      const isKing = i === 0;
+      const isUser = this.highlightUser === citizen.login.toLowerCase();
+      const citizenLabelScale = 4;
+      const nameLabel = this.add.text(px, py - 18,
+        citizen.login, {
+        fontFamily: "'Silkscreen', monospace",
+        fontSize: `${11 * citizenLabelScale}px`,
+        color: isKing ? '#ffd700' : isUser ? '#ffd700' : '#e8d5a3',
+        stroke: '#000000',
+        strokeThickness: 4 * citizenLabelScale,
+        align: 'center',
+      });
+      nameLabel.setScale(1 / citizenLabelScale);
+      nameLabel.setOrigin(0.5, 1);
+      nameLabel.setDepth(11);
+      nameLabel.setVisible(false); // shown on zoom
+
+      this.citizenSprites.push({
+        sprite,
+        nameLabel,
+        key: spriteKey,
+        currentTile: [sx, sy],
+        targetTile: null,
+        speed: 18 + rand() * 14,   // pixels per second (slow wander)
+        waitTimer: rand() * 4000,   // stagger initial movement
+        login: citizen.login,
+      });
+    }
+
+    console.log(`Spawned ${this.citizenSprites.length} citizens on ${roadTiles.length} road tiles`);
+  }
+
+  private getSpriteForCitizen(index: number, total: number): string {
+    if (index === 0) return 'citizen-queen'; // King/ruler → queen sprite
+
+    const ratio = index / total;
+    if (ratio < 0.15) {
+      // Top contributors → nobles
+      return index % 3 === 0 ? 'citizen-noble-m' :
+             index % 3 === 1 ? 'citizen-noble-w' : 'citizen-princess';
+    } else if (ratio < 0.4) {
+      return index % 2 === 0 ? 'citizen-villager-m' : 'citizen-villager-w';
+    } else if (ratio < 0.7) {
+      return index % 2 === 0 ? 'citizen-peasant' : 'citizen-worker';
+    } else {
+      return index % 2 === 0 ? 'citizen-old-m' : 'citizen-old-w';
+    }
+  }
+
+  private updateCitizens(delta: number) {
+    for (const c of this.citizenSprites) {
+      // Wait timer (idle pause)
+      if (c.waitTimer > 0) {
+        c.waitTimer -= delta;
+        continue;
+      }
+
+      // Pick next target tile if needed
+      if (!c.targetTile) {
+        const [cx, cy] = c.currentTile;
+        const neighbors: [number, number][] = [];
+        for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx >= 0 && nx < this.cityW && ny >= 0 && ny < this.cityH &&
+              this.cityTerrain[ny][nx] === TILES.ROAD) {
+            neighbors.push([nx, ny]);
+          }
+        }
+
+        if (neighbors.length > 0) {
+          c.targetTile = neighbors[Math.floor(Math.random() * neighbors.length)];
+
+          // Set walk animation based on direction
+          const dx = c.targetTile[0] - cx;
+          const dy = c.targetTile[1] - cy;
+
+          if (dy > 0) {
+            c.sprite.play(`${c.key}-walk-down`, true);
+            c.sprite.flipX = false;
+          } else if (dy < 0) {
+            c.sprite.play(`${c.key}-walk-up`, true);
+            c.sprite.flipX = false;
+          } else if (dx > 0) {
+            c.sprite.play(`${c.key}-walk-right`, true);
+            c.sprite.flipX = false;
+          } else {
+            c.sprite.play(`${c.key}-walk-right`, true);
+            c.sprite.flipX = true; // mirror for walking left
+          }
+        } else {
+          c.waitTimer = 2000; // stuck, wait
+        }
+        continue;
+      }
+
+      // Move toward target tile
+      const targetX = c.targetTile[0] * TILE_SIZE + TILE_SIZE / 2;
+      const targetY = c.targetTile[1] * TILE_SIZE + TILE_SIZE / 2;
+      const dx = targetX - c.sprite.x;
+      const dy = targetY - c.sprite.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < 1) {
+        // Arrived
+        c.sprite.x = targetX;
+        c.sprite.y = targetY;
+        c.currentTile = c.targetTile;
+        c.targetTile = null;
+
+        // Random pause (30% chance)
+        if (Math.random() < 0.3) {
+          c.waitTimer = 500 + Math.random() * 3000;
+          c.sprite.play(`${c.key}-idle`, true);
+        }
+      } else {
+        const step = Math.min(c.speed * delta / 1000, dist);
+        c.sprite.x += (dx / dist) * step;
+        c.sprite.y += (dy / dist) * step;
+      }
+
+      // Update name label position
+      c.nameLabel.x = c.sprite.x;
+      c.nameLabel.y = c.sprite.y - 18;
+    }
+  }
+
+  private showCitizenInfo(c: WalkingCitizen) {
+    const citizen = this.city.citizens.find(ci => ci.login === c.login);
+    if (!citizen) return;
+
+    const panel = document.getElementById('info-panel')!;
+    const isKing = this.city.king?.login === c.login;
+    const isUser = this.highlightUser === c.login.toLowerCase();
+
+    // Determine rank and title
+    const rank = this.city.citizens.findIndex(ci => ci.login === citizen.login);
+    const total = this.city.citizens.length;
+    const { icon, title } = citizenTitle(rank, total, isKing, citizen.totalContributions);
+
+    // Show GitHub avatar
+    const avatarEl = document.getElementById('info-avatar') as HTMLImageElement;
+    avatarEl.src = `https://github.com/${citizen.login}.png?size=128`;
+    avatarEl.alt = citizen.login;
+    avatarEl.style.display = 'block';
+    avatarEl.onerror = () => { avatarEl.style.display = 'none'; };
+
+    document.getElementById('info-name')!.innerHTML =
+      (isUser ? '★ ' : '') + icon + ' ' +
+      `<a class="gh-link" href="https://github.com/${citizen.login}" target="_blank">${citizen.login}</a>`;
+    document.getElementById('info-tier')!.textContent =
+      `${title} of the ${this.city.language} Kingdom`;
+
+    const repoLinks = citizen.repos.map((r: string) =>
+      `<a class="gh-link" href="https://github.com/${r}" target="_blank">${r.split('/').pop()}</a>`
+    ).join(', ');
+    const stats = [
+      stat('Contributions', citizen.totalContributions.toLocaleString()),
+      `<div class="stat"><span class="stat-label">Repos</span><span class="stat-value">${repoLinks}</span></div>`,
+    ];
+
+    document.getElementById('info-stats')!.innerHTML = stats.join('');
+    document.getElementById('info-king')!.innerHTML = '';
+    if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
+    panel.style.display = 'block';
+  }
+
+  private showBuildingInfo(b: CityBuilding) {
+    // Public buildings show a simple info card
+    if (b.isPublic || !b.repoMetrics) {
+      const panel = document.getElementById('info-panel')!;
+      const avatarEl = document.getElementById('info-avatar') as HTMLImageElement;
+      avatarEl.style.display = 'none';
+      document.getElementById('info-name')!.textContent = `🏛 ${b.publicName || 'Civic Building'}`;
+      document.getElementById('info-tier')!.textContent =
+        `Public building in the ${this.city.language} Kingdom`;
+      document.getElementById('info-stats')!.innerHTML =
+        stat('Type', b.publicName || 'Civic') + stat('Size', `${b.width}×${b.height} tiles`);
+      document.getElementById('info-king')!.innerHTML = '';
+      if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
+      panel.style.display = 'block';
+      return;
+    }
+
+    const panel = document.getElementById('info-panel')!;
+    const repo = b.repoMetrics.repo;
+    const isUserRepo = this.isUserBuilding(b);
+
+    // Show repo owner's avatar
+    const avatarEl = document.getElementById('info-avatar') as HTMLImageElement;
+    const owner = repo.full_name.split('/')[0];
+    avatarEl.src = `https://github.com/${owner}.png?size=128`;
+    avatarEl.alt = owner;
+    avatarEl.style.display = 'block';
+    avatarEl.onerror = () => { avatarEl.style.display = 'none'; };
+
+    const rankLabel = b.rank.charAt(0).toUpperCase() + b.rank.slice(1);
+    document.getElementById('info-name')!.innerHTML =
+      (isUserRepo ? '★ ' : '') + `<a class="gh-link" href="https://github.com/${repo.full_name}" target="_blank">${repo.full_name}</a>`;
+    document.getElementById('info-tier')!.textContent =
+      `${RANK_ICONS[b.rank]} ${rankLabel} in the ${this.city.language} Kingdom`;
+
+    // Find max values for bar scaling across buildings in this city
+    const repoBuildings = this.city.buildings.filter(bb => bb.repoMetrics);
+    const maxStars = Math.max(...repoBuildings.map(bb => bb.repoMetrics!.repo.stargazers_count), 1);
+    const maxForks = Math.max(...repoBuildings.map(bb => bb.repoMetrics!.repo.forks_count), 1);
+    const maxIssues = Math.max(...repoBuildings.map(bb => bb.repoMetrics!.repo.open_issues_count), 1);
+
+    const stats = [];
+    if (repo.description) stats.push(stat('', repo.description));
+    stats.push('<hr class="golden">');
+    stats.push(
+      statBar('Stars', repo.stargazers_count, maxStars, 'orange'),
+      statBar('Forks', repo.forks_count, maxForks, 'blue'),
+      statBar('Issues', repo.open_issues_count, maxIssues, 'red'),
+      stat('Contributors', b.repoMetrics.contributors.length.toString()),
+      stat('Commits', b.repoMetrics.totalCommits.toLocaleString()),
+    );
+
+    if (repo.pushed_at) {
+      const pushed = new Date(repo.pushed_at);
+      const daysAgo = Math.floor((Date.now() - pushed.getTime()) / (1000 * 60 * 60 * 24));
+      const activity = daysAgo < 7 ? '🟢 Active' :
+                       daysAgo < 30 ? '🟡 Recent' :
+                       daysAgo < 365 ? '🟠 Quiet' : '🔴 Dormant';
+      stats.push(stat('Activity', `${activity} (${daysAgo}d ago)`));
+    }
+
+    document.getElementById('info-stats')!.innerHTML = stats.join('');
+
+    const kingEl = document.getElementById('info-king')!;
+    const mayor = b.repoMetrics.king;
+    kingEl.innerHTML = mayor
+      ? `🏛 Owner: <a class="gh-link citizen-link" href="#" data-login="${mayor.login}">${mayor.login}</a> (${mayor.contributions.toLocaleString()} commits)`
+      : '';
+
+    // Wire up citizen links — clicking a user opens their citizen card
+    kingEl.querySelectorAll('.citizen-link').forEach((link) => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const login = (link as HTMLElement).dataset.login;
+        if (login) this.openCitizenByLogin(login);
+      });
+    });
+
+    if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
+    panel.style.display = 'block';
+  }
+
+  /** Open a citizen's info card by their login name */
+  private openCitizenByLogin(login: string) {
+    // Find the walking citizen sprite if they're on screen
+    const walking = this.citizenSprites.find((wc: WalkingCitizen) => wc.login === login);
+    if (walking) {
+      this.showCitizenInfo(walking);
+      return;
+    }
+    // Citizen exists in data but not on screen — show info directly from data
+    const citizen = this.city.citizens.find(ci => ci.login === login);
+    if (!citizen) return;
+
+    const panel = document.getElementById('info-panel')!;
+    const isKing = this.city.king?.login === login;
+    const rank = this.city.citizens.findIndex(ci => ci.login === login);
+    const total = this.city.citizens.length;
+    const { icon, title } = citizenTitle(rank, total, isKing, citizen.totalContributions);
+
+    const avatarEl = document.getElementById('info-avatar') as HTMLImageElement;
+    avatarEl.src = `https://github.com/${citizen.login}.png?size=128`;
+    avatarEl.alt = citizen.login;
+    avatarEl.style.display = 'block';
+    avatarEl.onerror = () => { avatarEl.style.display = 'none'; };
+
+    document.getElementById('info-name')!.innerHTML =
+      icon + ' ' +
+      `<a class="gh-link" href="https://github.com/${citizen.login}" target="_blank">${citizen.login}</a>`;
+    document.getElementById('info-tier')!.textContent =
+      `${title} of the ${this.city.language} Kingdom`;
+
+    const repoLinks = citizen.repos.map((r: string) =>
+      `<a class="gh-link" href="https://github.com/${r}" target="_blank">${r.split('/').pop()}</a>`
+    ).join(', ');
+    const stats = [
+      stat('Contributions', citizen.totalContributions.toLocaleString()),
+      `<div class="stat"><span class="stat-label">Repos</span><span class="stat-value">${repoLinks}</span></div>`,
+    ];
+
+    document.getElementById('info-stats')!.innerHTML = stats.join('');
+    document.getElementById('info-king')!.innerHTML = '';
+    if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
+    panel.style.display = 'block';
+  }
+
+  private hideInfoPanel() {
+    document.getElementById('info-panel')!.style.display = 'none';
+    const avatarEl = document.getElementById('info-avatar') as HTMLImageElement;
+    if (avatarEl) { avatarEl.style.display = 'none'; avatarEl.src = ''; }
+  }
+
+  private addBackButton() {
+    // Now uses the header bar back button — set up city header instead
+    this.setupCityHeader();
+  }
+
+  private setupCityHeader() {
+    const header = document.getElementById('game-header');
+    if (!header) return;
+
+    const shared = (window as any).__gitworld;
+    const lk = shared?.kingdoms?.find((k: any) => k.language === this.city.language);
+
+    // Count citizens
+    let citizenCount = 0;
+    if (lk) {
+      const allContribs = new Set<string>();
+      for (const r of lk.repos) {
+        for (const c of r.contributors) {
+          allContribs.add(c.login);
+        }
+      }
+      citizenCount = allContribs.size;
+    }
+
+    const totalStars = lk ? lk.totalStars : 0;
+    const fmt = (n: number) => n >= 1000000 ? (n / 1000000).toFixed(1) + 'M'
+      : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
+
+    // Update title for city mode
+    const hdrTitle = document.getElementById('hdr-title');
+    if (hdrTitle) hdrTitle.textContent = 'City of ' + this.city.language;
+
+    // Fully rebuild left side: Back button + building count + stars
+    // Building and Citizen counts are clickable — they open the legend panel
+    const leftEl = header.querySelector('.header-left') as HTMLElement;
+    if (leftEl) {
+      leftEl.innerHTML =
+        `<span class="header-stat header-clickable" id="hdr-buildings"><span class="stat-icon">🏰</span> <span>${this.city.buildings.length}</span> Buildings</span>` +
+        `<span class="header-stat"><span class="stat-icon">★</span> <span>${fmt(totalStars)}</span></span>`;
+
+      // Prepend back button
+      const backBtn = document.createElement('button');
+      backBtn.className = 'rpgui-button header-back';
+      backBtn.innerHTML = '<p>← Back</p>';
+      backBtn.onclick = () => {
+        const legend = document.getElementById('legend');
+        if (legend) legend.style.display = 'none';
+        this.hideInfoPanel();
+        this.scene.start('WorldScene', this.returnData);
+      };
+      leftEl.prepend(backBtn);
+
+      // Click buildings count → open legend panel (buildings tab)
+      const buildingsBtn = document.getElementById('hdr-buildings');
+      if (buildingsBtn) {
+        buildingsBtn.onclick = () => {
+          const legend = document.getElementById('legend');
+          if (legend) {
+            legend.style.display = legend.style.display === 'block' ? 'none' : 'block';
+            // Focus the search input
+            const searchInput = document.getElementById('legend-search') as HTMLInputElement;
+            if (searchInput) { searchInput.value = ''; searchInput.focus(); searchInput.dispatchEvent(new Event('input')); }
+            // Scroll to top (buildings)
+            legend.scrollTop = 0;
+          }
+        };
+      }
+    }
+
+    // Fully rebuild right side: search + auth + settings
+    const rightEl = header.querySelector('.header-right') as HTMLElement;
+    if (rightEl) {
+      rightEl.innerHTML =
+        `<span class="header-stat header-clickable" id="hdr-citizens-btn"><span class="stat-icon">👥</span> <span>${citizenCount}</span> Citizens</span>` +
+        `<input type="text" id="hdr-search" placeholder="Search world..." />` +
+        `<span id="hdr-auth"><a href="/api/auth/github" class="hdr-auth-link" id="hdr-signin">Sign in</a></span>` +
+        `<button id="settings-btn" class="rpgui-button" title="Settings" style="display:inline-block;"><p>&#9881;</p></button>`;
+
+      // Restore auth state if user is already signed in
+      const gkUser = (window as any).__gkUser;
+      const authEl = document.getElementById('hdr-auth');
+      if (gkUser && authEl) {
+        authEl.innerHTML =
+          `<img class="hdr-auth-avatar" src="${gkUser.avatar_url}" alt="${gkUser.login}" title="${gkUser.login}" />` +
+          ` <span class="hdr-auth-name" title="View your kingdom">${gkUser.login}</span>`;
+        authEl.style.cursor = 'pointer';
+        authEl.addEventListener('click', () => { window.location.href = `/${gkUser.login}`; });
+      }
+
+      // Wire up settings button
+      const settingsBtn = document.getElementById('settings-btn');
+      if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+          (window as any).openSettings?.() ||
+            ((document.getElementById('settings-panel') as HTMLElement).style.display = 'block');
+        });
+      }
+
+      // Wire up search input — search navigates within the world, no page reload
+      const searchInput = document.getElementById('hdr-search') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            const query = searchInput.value.trim().toLowerCase();
+            if (!query) return;
+
+            const shared = (window as any).__gitworld;
+            if (!shared?.kingdoms) return;
+
+            // Find a language kingdom containing repos by this user
+            // Match by owner name OR repo name
+            const matchKingdom = (shared.kingdoms as any[]).find((lk: any) =>
+              lk.repos.some((r: any) => {
+                const fullName = r.repo.full_name.toLowerCase();
+                const repoName = r.repo.name.toLowerCase();
+                return fullName.startsWith(query + '/') || repoName === query || fullName === query;
+              })
+            );
+
+            if (matchKingdom) {
+              // Go back to world map and the WorldScene search will handle the pan
+              window.history.pushState({}, '', `/${query}`);
+              this.scene.start('WorldScene', {
+                kingdoms: shared.kingdoms,
+                spritePacks: shared.spritePacks,
+                highlightUser: query,
+              });
+            } else {
+              searchInput.style.borderColor = '#ff4444';
+              searchInput.placeholder = 'Not found in world';
+              setTimeout(() => {
+                searchInput.style.borderColor = '';
+                searchInput.placeholder = 'Search world...';
+              }, 1500);
+            }
+            searchInput.value = '';
+            searchInput.blur();
+          }
+          e.stopPropagation();
+        });
+        searchInput.addEventListener('focus', () => {
+          if (this.input?.keyboard) this.input.keyboard.enabled = false;
+        });
+        searchInput.addEventListener('blur', () => {
+          if (this.input?.keyboard) this.input.keyboard.enabled = true;
+        });
+      }
+
+      // Click citizens count → open legend panel scrolled to citizens section
+      const citizensBtn = document.getElementById('hdr-citizens-btn');
+      if (citizensBtn) {
+        citizensBtn.onclick = () => {
+          const legend = document.getElementById('legend');
+          if (legend) {
+            legend.style.display = 'block';
+            // Clear search to show all items
+            const searchInput = document.getElementById('legend-search') as HTMLInputElement;
+            if (searchInput) { searchInput.value = ''; searchInput.dispatchEvent(new Event('input')); }
+            // Scroll to the citizens section header
+            const citizenHeader = document.getElementById('citizens-section-header');
+            if (citizenHeader) {
+              // Use requestAnimationFrame to ensure panel is visible before scrolling
+              requestAnimationFrame(() => {
+                citizenHeader.scrollIntoView({ behavior: 'instant', block: 'start' });
+              });
+            }
+          }
+        };
+      }
+    }
+
+    // Hide the old separate back button
+    const oldBtn = document.getElementById('back-to-world');
+    if (oldBtn) oldBtn.style.display = 'none';
+
+    header.style.display = 'flex';
+  }
+
+  private updateControlsHint() {
+    const hint = document.getElementById('controls-hint');
+    if (hint) {
+      hint.textContent = '';  // Header bar now shows this info
+    }
+  }
+
+  private buildCityLegend(buildings: CityBuilding[]) {
+    const legend = document.getElementById('legend')!;
+
+    let html = '<div style="margin-bottom:8px">' +
+      '<input type="text" id="legend-search" placeholder="Search buildings & citizens..." />' +
+      '</div>';
+
+    html += `<h3>${this.city.language} — ${buildings.length} Buildings</h3>`;
+
+    // Group by rank (repo buildings only)
+    const repoBuildings = buildings.filter(b => !b.isPublic && b.repoMetrics);
+    const publicBuildings = buildings.filter(b => b.isPublic);
+
+    const ranks: string[] = ['citadel', 'castle', 'palace', 'keep', 'manor', 'guild', 'cottage', 'hovel'];
+    for (const rank of ranks) {
+      const rankBuildings = repoBuildings.filter(b => b.rank === rank);
+      if (rankBuildings.length === 0) continue;
+
+      const icon = RANK_ICONS[rank] || '';
+      html += `<div style="color:#7a5a30;font-size:9px;margin-top:6px;border-top:1px solid #a07848;padding-top:4px">${icon} ${rank.toUpperCase()} (${rankBuildings.length})</div>`;
+
+      for (const b of rankBuildings) {
+        const isUser = this.isUserBuilding(b);
+        const starMarker = isUser ? '★ ' : '';
+        const nameStyle = isUser ? 'color:#ffd700' : '';
+        const stars = b.repoMetrics!.repo.stargazers_count;
+        const starsStr = stars >= 1000 ? Math.round(stars / 1000) + 'k★' : stars + '★';
+
+        html += `<div class="legend-item legend-settlement" data-bx="${b.x}" data-by="${b.y}" ` +
+          `data-repo="${b.repoMetrics!.repo.name.toLowerCase()}" style="font-size:9px">` +
+          `<span class="legend-name" style="padding-left:4px;${nameStyle}">${starMarker}${b.repoMetrics!.repo.name}</span>` +
+          `<span class="legend-tier">${starsStr}</span>` +
+          `</div>`;
+      }
+    }
+
+    // Civic buildings section
+    if (publicBuildings.length > 0) {
+      html += `<div style="color:#7a5a30;font-size:9px;margin-top:6px;border-top:1px solid #a07848;padding-top:4px">🏛 CIVIC (${publicBuildings.length})</div>`;
+      for (const b of publicBuildings) {
+        html += `<div class="legend-item legend-settlement" data-bx="${b.x}" data-by="${b.y}" ` +
+          `data-repo="${(b.publicName || 'civic').toLowerCase()}" style="font-size:9px">` +
+          `<span class="legend-name" style="padding-left:4px;color:#8a8a6a">🏛 ${b.publicName || 'Civic'}</span>` +
+          `<span class="legend-tier">${b.width}×${b.height}</span>` +
+          `</div>`;
+      }
+    }
+
+    // Citizens section — show ALL citizens (searchable via the same search box)
+    const allCitizens = this.city.citizens;
+    const totalCitizens = allCitizens.length;
+    if (allCitizens.length > 0) {
+      html += `<div id="citizens-section-header" style="color:#7a5a30;font-size:9px;margin-top:8px;border-top:1px solid #a07848;padding-top:4px">👥 CITIZENS (${totalCitizens})</div>`;
+      for (let i = 0; i < allCitizens.length; i++) {
+        const c = allCitizens[i];
+        const isKing = this.city.king?.login === c.login;
+        const isUser = this.highlightUser === c.login.toLowerCase();
+        const { icon, title } = citizenTitle(i, totalCitizens, isKing, c.totalContributions);
+        const style = isUser ? 'color:#ffd700' : '';
+        html += `<div class="legend-item legend-citizen" data-login="${c.login}" style="font-size:9px">` +
+          `<span class="legend-name" style="padding-left:4px;${style}">${isUser ? '★ ' : ''}${icon} ${c.login}</span>` +
+          `<span class="legend-tier">${title} · ${c.totalContributions.toLocaleString()}</span>` +
+          `</div>`;
+      }
+    }
+
+    legend.innerHTML = '<button id="legend-close" class="rpgui-button" title="Close"><p>✕</p></button>' + html;
+    legend.style.display = 'none';
+
+    // Wire up citizen legend clicks → open citizen info card
+    legend.querySelectorAll('.legend-citizen').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const login = (el as HTMLElement).dataset.login;
+        if (login) this.openCitizenByLogin(login);
+      });
+    });
+
+    // Show the toggle button
+    const toggleBtn = document.getElementById('legend-toggle');
+    if (toggleBtn) toggleBtn.style.display = 'block';
+
+    // Re-wire close button (legend innerHTML was replaced)
+    const closeBtn = legend.querySelector('#legend-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        legend.style.display = 'none';
+      });
+    }
+
+    // Search
+    const searchInput = document.getElementById('legend-search') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase().trim();
+        // Filter buildings
+        const bItems = legend.querySelectorAll('.legend-settlement') as NodeListOf<HTMLElement>;
+        bItems.forEach(el => {
+          if (!query) { el.style.display = ''; return; }
+          const name = el.dataset.repo || '';
+          el.style.display = name.includes(query) ? '' : 'none';
+        });
+        // Filter citizens too
+        const cItems = legend.querySelectorAll('.legend-citizen') as NodeListOf<HTMLElement>;
+        cItems.forEach(el => {
+          if (!query) { el.style.display = ''; return; }
+          const login = el.dataset.login || '';
+          el.style.display = login.toLowerCase().includes(query) ? '' : 'none';
+        });
+      });
+
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const query = searchInput.value.toLowerCase().trim();
+          if (!query) return;
+
+          // Try matching a building first
+          const match = buildings.find(b =>
+            b.repoMetrics?.repo.name.toLowerCase().includes(query) ||
+            b.publicName?.toLowerCase().includes(query)
+          );
+          if (match) {
+            this.cameras.main.pan(
+              (match.x + match.width / 2) * TILE_SIZE,
+              (match.y + match.height / 2) * TILE_SIZE,
+              500, 'Power2'
+            );
+            cityZoomIndex = CITY_ZOOM_LEVELS.indexOf(3);
+            this.cameras.main.zoomTo(3, 500);
+            this.showBuildingInfo(match);
+            return;
+          }
+
+          // Try matching a citizen
+          const citizenMatch = this.city.citizens.find(c =>
+            c.login.toLowerCase().includes(query)
+          );
+          if (citizenMatch) {
+            this.openCitizenByLogin(citizenMatch.login);
+          }
+        }
+      });
+    }
+
+    // Click handler
+    legend.addEventListener('click', (e) => {
+      const item = (e.target as HTMLElement).closest('.legend-settlement') as HTMLElement;
+      if (!item) return;
+      const bx = parseInt(item.dataset.bx!, 10);
+      const by = parseInt(item.dataset.by!, 10);
+      const b = buildings.find(b => b.x === bx && b.y === by);
+      if (b) {
+        this.cameras.main.pan(
+          (b.x + b.width / 2) * TILE_SIZE,
+          (b.y + b.height / 2) * TILE_SIZE,
+          500, 'Power2'
+        );
+        this.cameras.main.zoomTo(3, 500);
+        this.showBuildingInfo(b);
+      }
+    });
+  }
+}
+
+/**
+ * Medieval title hierarchy based on contribution count.
+ * Each tier has many name variants — the citizen's rank index selects
+ * which variant they get, so adjacent citizens rarely share a title.
+ *
+ *  Tier         Commits   Titles
+ *  ─────────────────────────────────────────────────
+ *  Royalty      (king)    King / Queen
+ *  High Noble   3000+     Grand Duke, Archduke, Prince, Sovereign, High Chancellor, Regent
+ *  Noble        1500+     Duke, Duchess, Marquess, Marchioness, Viceroy, Palatine
+ *  Upper Lord   800+      Earl, Count, Countess, Viscount, Jarl, Overlord, Warden
+ *  Lower Lord   400+      Baron, Baroness, Thane, Castellan, Liege, Banneret, Steward
+ *  Knight       150+      Knight, Dame, Paladin, Templar, Sentinel, Champion, Crusader, Defender
+ *  Gentry       50+       Squire, Esquire, Herald, Reeve, Magistrate, Bailiff, Alderman, Yeoman
+ *  Artisan      15+       Artisan, Scribe, Mason, Smith, Alchemist, Herbalist, Tinkerer, Sage
+ *  Commoner     1+        Peasant, Villager, Commoner, Serf, Wanderer, Pilgrim, Drifter, Vagabond
+ */
+const TITLE_TIERS: { min: number; icon: string; names: string[] }[] = [
+  { min: 0,    icon: '👑', names: ['King', 'Queen'] },  // only isKing gets this
+  { min: 3000, icon: '🏰', names: ['Grand Duke', 'Archduke', 'Prince', 'Sovereign', 'High Chancellor', 'Regent'] },
+  { min: 1500, icon: '🏰', names: ['Duke', 'Duchess', 'Marquess', 'Marchioness', 'Viceroy', 'Palatine'] },
+  { min: 800,  icon: '⚜',  names: ['Earl', 'Count', 'Countess', 'Viscount', 'Jarl', 'Overlord', 'Warden'] },
+  { min: 400,  icon: '🛡',  names: ['Baron', 'Baroness', 'Thane', 'Castellan', 'Liege', 'Banneret', 'Steward'] },
+  { min: 150,  icon: '⚔',  names: ['Knight', 'Dame', 'Paladin', 'Templar', 'Sentinel', 'Champion', 'Crusader', 'Defender'] },
+  { min: 50,   icon: '🗡',  names: ['Squire', 'Esquire', 'Herald', 'Reeve', 'Magistrate', 'Bailiff', 'Alderman', 'Yeoman'] },
+  { min: 15,   icon: '🔨',  names: ['Artisan', 'Scribe', 'Mason', 'Smith', 'Alchemist', 'Herbalist', 'Tinkerer', 'Sage'] },
+  { min: 0,    icon: '🧑',  names: ['Peasant', 'Villager', 'Commoner', 'Serf', 'Wanderer', 'Pilgrim', 'Drifter', 'Vagabond'] },
+];
+
+function citizenTitle(rank: number, _total: number, isKing: boolean, contributions: number): { icon: string; title: string } {
+  if (isKing) {
+    // Top contributor alternates King / Queen using a simple hash of rank
+    return { icon: '👑', title: TITLE_TIERS[0].names[rank % 2] };
+  }
+  // Skip tier 0 (royalty), match by contribution threshold
+  for (let i = 1; i < TITLE_TIERS.length; i++) {
+    const tier = TITLE_TIERS[i];
+    if (contributions >= tier.min) {
+      const name = tier.names[rank % tier.names.length];
+      return { icon: tier.icon, title: name };
+    }
+  }
+  return { icon: '🧑', title: 'Peasant' };
+}
+
+function stat(label: string, value: string): string {
+  return `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
+}
+
+function statBar(label: string, value: number, max: number, color: string): string {
+  const pct = Math.min(100, Math.round((value / max) * 100));
+  const fmt = value >= 1000000 ? (value / 1000000).toFixed(1) + 'M'
+    : value >= 1000 ? Math.round(value / 1000).toLocaleString() + 'k'
+    : value.toLocaleString();
+  return `<div class="stat-bar-row">` +
+    `<span class="stat-bar-label">${label}</span>` +
+    `<div class="stat-bar-track"><div class="stat-bar-fill bar-${color}" style="width:${pct}%"></div></div>` +
+    `<span class="stat-bar-value">${fmt}</span>` +
+    `</div>`;
+}

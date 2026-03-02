@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Git Kingdom — Explore GitHub as a Fantasy RPG World</title>
+  <meta name="description" content="Visualize any GitHub profile as a pixel-art fantasy kingdom. Language kingdoms, castle-sized repos, walking citizen contributors — all in retro RPG style." />
+  <meta name="keywords" content="GitHub, visualization, RPG, pixel art, open source, repos, game, kingdom, retro" />
+  <meta name="author" content="Git Kingdom" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Git Kingdom — Explore GitHub as a Fantasy RPG World" />
+  <meta property="og:description" content="Turn any GitHub profile into a pixel-art kingdom. Language kingdoms, castle-sized repos, walking citizens." />
+  <meta property="og:image" content="/assets/og-image.png" />
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Git Kingdom — Explore GitHub as a Fantasy RPG World" />
+  <meta name="twitter:description" content="Turn any GitHub profile into a pixel-art kingdom. Language kingdoms, castle-sized repos, walking citizens." />
+  <meta name="twitter:image" content="/assets/og-image.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <!-- RPGUI Framework — cohesive retro RPG UI -->
+  <link rel="stylesheet" href="/vendor/rpgui/rpgui.min.css">
+  <script src="/vendor/rpgui/rpgui.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a2e;
+      overflow: hidden;
+      image-rendering: pixelated;
+    }
+    #game-container {
+      width: 100vw;
+      height: 100vh;
+    }
+    /* Custom RPG cursor on game canvas */
+    #game-container canvas {
+      cursor: url('/vendor/rpgui/img/cursor/default.png') 0 0, auto;
+    }
+
+    /* ─── RPGUI overlay: transparent layer for all HUD elements ─── */
+    #rpgui-overlay {
+      pointer-events: none !important;
+      overflow: visible !important;
+      background: none !important;
+    }
+    /* Re-enable clicks on actual UI elements */
+    #rpgui-overlay > * { pointer-events: auto; }
+    /* But let controls hint be click-through */
+    #controls-hint { pointer-events: none !important; }
+
+    /* ─── Info Panel (world + city) — bottom center ─── */
+    #info-panel {
+      position: fixed !important;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      top: auto !important;
+      padding: 10px 16px 14px !important;
+      min-width: 320px;
+      max-width: 500px;
+      max-height: 70vh;
+      overflow-y: auto;
+      display: none;
+      z-index: 100;
+    }
+    #info-panel h2 {
+      font-size: 11px;
+      margin-bottom: 8px;
+      border-bottom: none;
+      padding-bottom: 4px;
+    }
+    #info-panel .stat {
+      display: flex;
+      justify-content: space-between;
+      margin: 4px 0;
+    }
+    #info-panel .stat-label { opacity: 0.7; }
+    #info-panel .stat-value { font-weight: bold; }
+    #info-panel .king { margin-top: 8px; font-weight: bold; }
+
+    /* Draggable panel hint — grab cursor on the top header area */
+    #info-panel .info-header,
+    #legend h3 { cursor: grab; }
+
+    /* GitHub links in panels and legend */
+    .gh-link {
+      color: #c8a853;
+      text-decoration: none;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .gh-link:hover {
+      color: #ffd700;
+      text-decoration: underline;
+    }
+
+    /* Close button for info panel */
+    #info-close {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      z-index: 10;
+      min-width: 30px !important;
+      width: 30px !important;
+      height: 30px !important;
+      padding: 0 !important;
+    }
+    #info-close p { font-size: 10px !important; margin: 0; line-height: 1; }
+
+    /* ─── Loading ─── */
+    #loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #c8a853;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 12px;
+      line-height: 1.5;
+      z-index: 200;
+    }
+
+    /* ─── Controls hint ─── */
+    #controls-hint {
+      position: fixed;
+      bottom: 4px;
+      left: 12px;
+      font-size: 8px;
+      opacity: 0.5;
+      z-index: 100;
+    }
+
+    /* ─── Legend toggle button (top-right, below music) ─── */
+    #legend-toggle {
+      position: fixed !important;
+      top: 92px;
+      right: 12px;
+      z-index: 200;
+      display: none;
+      min-width: auto !important;
+      width: auto !important;
+      height: auto !important;
+      padding: 6px 12px !important;
+    }
+    #legend-toggle p { font-size: 8px !important; margin: 0; }
+
+    /* ─── Legend Panel ─── */
+    #legend {
+      position: fixed !important;
+      top: 130px;
+      right: 10px;
+      padding: 6px 10px !important;
+      z-index: 100;
+      max-height: 65vh;
+      overflow-y: auto;
+      display: none;
+    }
+    /* Legend close button */
+    #legend-close {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      z-index: 10;
+      min-width: 26px !important;
+      width: 26px !important;
+      height: 26px !important;
+      padding: 0 !important;
+    }
+    #legend-close p { font-size: 8px !important; margin: 0; line-height: 1; }
+    #legend h3 {
+      font-size: 8px;
+      margin-bottom: 6px;
+      padding-bottom: 3px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0;
+      cursor: pointer;
+      font-size: 10px;
+    }
+    .legend-item:hover {
+      background: rgba(255,255,255,0.08);
+    }
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .legend-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 140px;
+    }
+    .legend-tier {
+      opacity: 0.7;
+      font-size: 9px;
+      margin-left: auto;
+    }
+
+    /* ─── Entry Modal (RPG title screen — click to enter) ─── */
+    #entry-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 300;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto !important;
+      transition: opacity 0.5s ease;
+    }
+    #entry-modal.hiding {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .entry-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 10, 20, 0.7);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+    .entry-content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .entry-title {
+      font-family: 'Press Start 2P', cursive;
+      color: #ffd700;
+      font-size: 32px;
+      margin-bottom: 8px;
+      letter-spacing: 3px;
+      text-shadow: 0 0 20px rgba(255,215,0,0.4), 0 4px 0 #8b6914;
+      animation: titleGlow 3s ease-in-out infinite alternate;
+    }
+    @keyframes titleGlow {
+      from { text-shadow: 0 0 20px rgba(255,215,0,0.4), 0 4px 0 #8b6914; }
+      to { text-shadow: 0 0 40px rgba(255,215,0,0.6), 0 4px 0 #8b6914, 0 0 80px rgba(255,215,0,0.15); }
+    }
+    .entry-subtitle {
+      font-family: 'Press Start 2P', cursive;
+      color: #a89060;
+      font-size: 8px;
+      margin-bottom: 32px;
+      letter-spacing: 1px;
+    }
+    .entry-form {
+      position: relative !important;
+      padding: 16px 20px !important;
+      width: 440px;
+      text-align: center;
+    }
+    .entry-form .rpgui-button {
+      width: 100%;
+      margin-top: 10px;
+    }
+    .entry-form .rpgui-button p {
+      line-height: 40px !important;
+      height: auto !important;
+      vertical-align: middle !important;
+    }
+    .entry-tagline {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7px;
+      color: #b0a070;
+      line-height: 1.6;
+      margin-bottom: 4px;
+    }
+    #btn-enter {
+      min-width: 280px;
+    }
+    .entry-credit {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7px;
+      color: #5a4a2a;
+      margin-top: 10px;
+      text-align: center;
+    }
+    .entry-credit a {
+      color: #7a6a3a;
+      text-decoration: underline;
+    }
+    .entry-credit a:hover {
+      color: #d4a24e;
+    }
+    .entry-press-hint {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8px;
+      color: #6a5a3a;
+      margin-top: 24px;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ─── Settings Panel ─── */
+    #settings-panel {
+      position: fixed !important;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 16px 20px !important;
+      z-index: 400;
+      width: 420px;
+      display: none;
+    }
+    #settings-panel h3 {
+      font-size: 10px;
+      margin-bottom: 12px;
+    }
+    .settings-hint {
+      font-size: 8px;
+      opacity: 0.7;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    #settings-panel input {
+      width: 100%;
+      margin-bottom: 6px;
+    }
+    .settings-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .settings-buttons .rpgui-button {
+      flex: 1;
+    }
+    #settings-close {
+      position: absolute !important;
+      top: 4px;
+      right: 4px;
+      min-width: auto !important;
+      width: auto !important;
+      height: auto !important;
+      padding: 2px 8px !important;
+    }
+    #settings-close p { font-size: 10px !important; margin: 0; }
+    #token-status {
+      margin-top: 6px;
+      font-size: 8px;
+      opacity: 0.8;
+    }
+
+    /* ─── Settings gear button (inside header-right) ─── */
+    #settings-btn {
+      min-width: auto !important;
+      width: auto !important;
+      height: auto !important;
+      padding: 2px 6px !important;
+      display: none;
+      vertical-align: middle;
+    }
+    #settings-btn p { font-size: 12px !important; margin: 0; line-height: 1; }
+
+    /* ─── Music toggle button (top-right, below header) ─── */
+    #music-btn {
+      position: fixed !important;
+      top: 52px;
+      right: 12px;
+      z-index: 350;
+      min-width: auto !important;
+      width: auto !important;
+      height: auto !important;
+      padding: 6px 10px !important;
+    }
+    #music-btn p { font-size: 14px !important; margin: 0; line-height: 1; }
+
+    /* ─── Game Header Bar (full-width HUD across top) ─── */
+    #game-header {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 16px !important;
+      min-height: 20px;
+    }
+    #game-header .header-left,
+    #game-header .header-right {
+      font-size: 9px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 2;
+    }
+    #game-header .header-center {
+      position: absolute !important;
+      left: 50% !important;
+      top: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      z-index: 3;
+      pointer-events: none;
+    }
+    #hdr-title-banner {
+      display: inline-block !important;
+      position: relative !important;
+      padding: 1px 16px !important;
+      border-width: 8px !important;
+      border-image-width: 10px !important;
+      line-height: 1.2 !important;
+      pointer-events: auto;
+    }
+    #hdr-title {
+      font-size: 11px;
+      color: #ffd700;
+      text-shadow: 0 0 8px rgba(255,215,0,0.3);
+      white-space: nowrap;
+    }
+    #game-header .header-stat {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      vertical-align: middle;
+      line-height: 1 !important;
+    }
+    #game-header .header-clickable {
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 2px 6px;
+      transition: background 0.15s;
+    }
+    #game-header .header-clickable:hover {
+      background: rgba(255,255,255,0.15);
+    }
+    #game-header .header-stat .stat-icon {
+      font-size: 9px;
+      line-height: 1 !important;
+      display: inline-block;
+      width: 12px;
+      text-align: center;
+    }
+    #game-header .header-stat span {
+      line-height: 1 !important;
+    }
+    #game-header .header-back {
+      min-width: auto !important;
+      width: auto !important;
+      height: auto !important;
+      padding: 2px 8px !important;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    #game-header .header-back p { font-size: 7px !important; margin: 0; line-height: 1 !important; }
+
+    /* ─── Header Search Input ─── */
+    #hdr-search {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px solid #5a4a2a;
+      color: #e0d0a0;
+      padding: 4px 8px;
+      width: 160px;
+      outline: none;
+      transition: border-color 0.2s, width 0.2s;
+    }
+    #hdr-search:focus {
+      border-color: #ffd700;
+      width: 200px;
+    }
+    #hdr-search::placeholder {
+      color: #6a5a3a;
+      font-size: 7px;
+    }
+
+    /* ─── Header Auth (sign-in link or avatar) ─── */
+    .hdr-auth-link {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7px;
+      color: #a0a0b0;
+      text-decoration: none;
+      cursor: pointer;
+      transition: color 0.2s;
+      white-space: nowrap;
+    }
+    .hdr-auth-link:hover {
+      color: #ffd700;
+    }
+    .hdr-auth-avatar {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid #ffd700;
+      cursor: pointer;
+      vertical-align: middle;
+      image-rendering: auto;
+    }
+    .hdr-auth-name {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7px;
+      color: #ffd700;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    .hdr-auth-name:hover {
+      text-decoration: underline;
+    }
+
+    /* ─── RPG Stat Bar (compact stat bar for info panels) ─── */
+    .stat-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0;
+    }
+    .stat-bar-label {
+      opacity: 0.7;
+      font-size: 10px;
+      min-width: 60px;
+    }
+    .stat-bar-track {
+      flex: 1;
+      height: 12px;
+      background: #2a1a0a;
+      border: 2px solid #5a3a1a;
+      position: relative;
+      image-rendering: pixelated;
+    }
+    .stat-bar-fill {
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+    .stat-bar-fill.bar-orange { background: #e8a020; }
+    .stat-bar-fill.bar-green { background: #50a830; }
+    .stat-bar-fill.bar-blue { background: #3888d0; }
+    .stat-bar-fill.bar-red { background: #d04040; }
+    .stat-bar-value {
+      font-weight: bold;
+      font-size: 10px;
+      min-width: 50px;
+      text-align: right;
+    }
+
+    /* ─── Info panel with avatar layout ─── */
+    #info-panel .info-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    #info-panel .info-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 4px;
+      border: 2px solid #a07848;
+      flex-shrink: 0;
+      image-rendering: auto;
+      object-fit: cover;
+      display: none;
+    }
+    #info-panel .info-header-text {
+      flex: 1;
+      min-width: 0;
+    }
+    #info-panel .info-header-text h2 {
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="loading">Summoning kingdoms...</div>
+
+  <!-- RPGUI overlay: wraps all HUD elements for cohesive RPG styling -->
+  <div class="rpgui-content" id="rpgui-overlay">
+
+    <!-- Entry Modal — simple RPG title screen, click to enter -->
+    <div id="entry-modal">
+      <div class="entry-backdrop"></div>
+      <div class="entry-content">
+        <h1 class="entry-title">GIT KINGDOM</h1>
+        <p class="entry-subtitle">Explore GitHub as a Fantasy RPG World</p>
+        <div class="entry-form rpgui-container framed-golden">
+          <p class="entry-tagline">Visualize any GitHub profile as a pixel-art fantasy kingdom</p>
+          <button id="btn-enter" class="rpgui-button golden"><p>Enter the Kingdom</p></button>
+          <p class="entry-credit">Created by <a href="https://www.robertcreative.com/" target="_blank" rel="noopener">Rob Gourley</a></p>
+        </div>
+        <p class="entry-press-hint">- click to enter -</p>
+      </div>
+    </div>
+
+    <!-- Settings Panel (accessible from entry modal + in-game gear icon) -->
+    <div id="settings-panel" class="rpgui-container framed-golden">
+      <button id="settings-close" class="rpgui-button" title="Close"><p>&#10005;</p></button>
+      <h3>Settings</h3>
+      <p class="settings-hint">GitHub Token (optional — raises rate limit from 60 to 5,000 req/hr)</p>
+      <input type="password" id="settings-token-input" placeholder="ghp_xxxxxxxxxxxx" />
+      <div class="settings-buttons">
+        <button id="btn-save-token" class="rpgui-button"><p>Save</p></button>
+        <button id="btn-clear-token" class="rpgui-button"><p>Clear</p></button>
+      </div>
+      <p id="token-status"></p>
+    </div>
+
+    <!-- RPG Header Bar — full-width HUD across top -->
+    <div id="game-header" class="rpgui-container framed-golden">
+      <div class="header-left">
+        <span class="header-stat"><span class="stat-icon">⚔</span> <span id="hdr-kingdoms">0</span> Kingdoms</span>
+        <span class="header-stat"><span class="stat-icon">★</span> <span id="hdr-stars">0</span></span>
+      </div>
+      <div class="header-center">
+        <div id="hdr-title-banner" class="rpgui-container framed">
+          <span id="hdr-title">GIT KINGDOM</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <input type="text" id="hdr-search" placeholder="GitHub user..." />
+        <span id="hdr-auth">
+          <a href="/api/auth/github" class="hdr-auth-link" id="hdr-signin">Sign in</a>
+        </span>
+        <button id="settings-btn" class="rpgui-button" title="Settings" style="display:none;"><p>&#9881;</p></button>
+      </div>
+    </div>
+
+    <div id="controls-hint"></div>
+
+    <!-- Music toggle -->
+    <button id="music-btn" class="rpgui-button" title="Toggle music"><p>🔇</p></button>
+
+    <!-- Legend toggle + panel -->
+    <button id="legend-toggle" class="rpgui-button" title="Toggle city list"><p>📜 Cities</p></button>
+    <div id="legend" class="rpgui-container framed-golden">
+      <button id="legend-close" class="rpgui-button" title="Close"><p>✕</p></button>
+    </div>
+
+    <!-- Info panel -->
+    <div id="info-panel" class="rpgui-container framed-golden">
+      <button id="info-close" class="rpgui-button" title="Close"><p>✕</p></button>
+      <div class="info-header">
+        <img id="info-avatar" class="info-avatar" src="" alt="" />
+        <div class="info-header-text">
+          <h2 id="info-name"></h2>
+          <div id="info-tier"></div>
+        </div>
+      </div>
+      <div id="info-stats"></div>
+      <div id="info-king" class="king"></div>
+    </div>
+
+  </div><!-- end rpgui-overlay -->
+
+  <!-- Background music -->
+  <audio id="bgm" loop preload="auto" src="/assets/audio/bgm.mp3"></audio>
+
+  <script>
+    // Music player — needs user interaction to start (browser autoplay policy)
+    (function() {
+      var audio = document.getElementById('bgm');
+      var btn = document.getElementById('music-btn');
+      var playing = false;
+
+      function tryPlay() {
+        audio.volume = 0.35;
+        audio.play().then(function() {
+          playing = true;
+          btn.querySelector('p').textContent = '🔊';
+        }).catch(function() {});
+      }
+
+      btn.addEventListener('click', function() {
+        if (playing) {
+          audio.pause();
+          playing = false;
+          btn.querySelector('p').textContent = '🔇';
+        } else {
+          tryPlay();
+        }
+      });
+
+      // Music is opt-in only — click the 🔇 button to start
+    })();
+
+    // Info panel close button
+    document.getElementById('info-close').addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.getElementById('info-panel').style.display = 'none';
+      var av = document.getElementById('info-avatar');
+      if (av) { av.style.display = 'none'; av.src = ''; }
+    });
+
+    // Legend toggle button
+    document.getElementById('legend-toggle').addEventListener('click', function() {
+      var legend = document.getElementById('legend');
+      legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+    });
+
+    // Legend close button
+    document.getElementById('legend-close').addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.getElementById('legend').style.display = 'none';
+    });
+
+    // ─── Settings panel ───
+    function openSettings() {
+      var panel = document.getElementById('settings-panel');
+      panel.style.display = 'block';
+      var saved = localStorage.getItem('gk_gh_token');
+      var input = document.getElementById('settings-token-input');
+      var status = document.getElementById('token-status');
+      if (saved) {
+        input.value = saved;
+        status.textContent = 'Token saved (' + saved.substring(0, 8) + '...)';
+      } else {
+        input.value = '';
+        status.textContent = 'No token set — using public rate limit (60 req/hr)';
+      }
+    }
+
+    // Expose openSettings globally so scenes can call it
+    window.openSettings = openSettings;
+
+    document.getElementById('settings-close').addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.getElementById('settings-panel').style.display = 'none';
+    });
+
+    document.getElementById('btn-save-token').addEventListener('click', function() {
+      var token = document.getElementById('settings-token-input').value.trim();
+      if (token) {
+        localStorage.setItem('gk_gh_token', token);
+        document.getElementById('token-status').textContent = 'Token saved!';
+      }
+    });
+
+    document.getElementById('btn-clear-token').addEventListener('click', function() {
+      localStorage.removeItem('gk_gh_token');
+      document.getElementById('settings-token-input').value = '';
+      document.getElementById('token-status').textContent = 'Token cleared.';
+    });
+
+    // ─── GitHub OAuth: check auth on load → update header ───
+    (function checkAuth() {
+      fetch('/api/auth/me', { credentials: 'include' })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(user) {
+          if (!user) return;
+          // User is signed in — replace "Sign in" link with avatar + username in header
+          var authEl = document.getElementById('hdr-auth');
+          if (authEl) {
+            authEl.innerHTML =
+              '<img class="hdr-auth-avatar" src="' + user.avatar_url + '" alt="' + user.login + '" title="' + user.login + '" />' +
+              ' <span class="hdr-auth-name" title="View your kingdom">' + user.login + '</span>';
+            // Click avatar/name → go to user's kingdom
+            authEl.addEventListener('click', function() {
+              window.location.href = '/' + user.login;
+            });
+          }
+          // Store user info globally for game scenes
+          window.__gkUser = user;
+        })
+        .catch(function() { /* not signed in, that's fine */ });
+    })();
+
+    // ─── Panel position reset (called before showing a panel) ───
+    window.__resetPanelPos = function(panel) {
+      if (!panel) return;
+      // Reset to CSS-defined position
+      panel.style.transform = '';
+      panel.style.top = '';
+      panel.style.bottom = '';
+      panel.style.left = '';
+      panel.style.right = '';
+    };
+
+    // ─── Draggable panels ───
+    // Make info-panel and legend draggable by their top edge
+    (function() {
+      function makeDraggable(panel) {
+        if (!panel) return;
+        var dragging = false, startX, startY, origLeft, origTop;
+
+        panel.addEventListener('mousedown', function(e) {
+          // Only drag from the panel background / header area, not buttons or inputs
+          var tag = e.target.tagName;
+          if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'A' || tag === 'P'
+              || e.target.closest('button') || e.target.closest('a')
+              || e.target.closest('input')) return;
+          // Only start drag from the top 40px of the panel (the header area)
+          var rect = panel.getBoundingClientRect();
+          if (e.clientY - rect.top > 40) return;
+
+          dragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          origLeft = rect.left;
+          origTop = rect.top;
+          panel.style.cursor = 'grabbing';
+          e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', function(e) {
+          if (!dragging) return;
+          var dx = e.clientX - startX;
+          var dy = e.clientY - startY;
+          // Switch from centered positioning to absolute fixed coords
+          panel.style.left = (origLeft + dx) + 'px';
+          panel.style.top = (origTop + dy) + 'px';
+          panel.style.transform = 'none';
+          panel.style.bottom = 'auto';
+          panel.style.right = 'auto';
+        });
+
+        window.addEventListener('mouseup', function() {
+          if (dragging) {
+            dragging = false;
+            panel.style.cursor = '';
+          }
+        });
+      }
+
+      makeDraggable(document.getElementById('info-panel'));
+      makeDraggable(document.getElementById('legend'));
+    })();
+  </script>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

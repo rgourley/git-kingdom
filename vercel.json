@@ -1,0 +1,9 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/editor.html", "destination": "/editor.html" },
+    { "source": "/:path*", "destination": "/index.html" }
+  ]
+}
