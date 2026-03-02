@@ -213,7 +213,12 @@ function showTitleScreen(): { waitForClick: () => Promise<void>; dismiss: () => 
     if (e.target === modal || (e.target as HTMLElement).classList.contains('entry-backdrop')) dismiss();
   });
 
-  const onKey = () => { dismiss(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+      dismiss();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
   document.addEventListener('keydown', onKey);
 
   return {
