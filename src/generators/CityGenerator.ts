@@ -149,13 +149,13 @@ export function generateCityInterior(
     getBuildingFootprint(m.repo.stargazers_count, i === 0, i),
   );
 
-  // ── City dimensions — compact sizing ──
+  // ── City dimensions — tight sizing for dense medieval city ──
   let totalArea = 0;
   for (const fp of footprints) {
-    totalArea += (fp.w + 2) * (fp.h + 2); // +2 for road/gap
+    totalArea += (fp.w + 1) * (fp.h + 1); // +1 for narrow road/gap
   }
-  // Compact multiplier — we want a dense city, not a sprawling field
-  totalArea *= 2.0;
+  // Slight extra room for roads and plazas
+  totalArea *= 1.2;
   const gridSide = Math.ceil(Math.sqrt(totalArea));
   const W = Math.max(40, Math.min(200, gridSide));
   const H = W;
@@ -211,7 +211,7 @@ export function generateCityInterior(
 
   // ── 3. Castle at center ──
   const castleSize = footprints.length > 0 ? footprints[0] : { w: 5, h: 5 };
-  const plazaR = Math.max(3, Math.floor(Math.max(castleSize.w, castleSize.h) / 2) + 2);
+  const plazaR = Math.max(2, Math.floor(Math.max(castleSize.w, castleSize.h) / 2) + 1);
 
   if (sortedRepos.length > 0) {
     const cs = castleSize;
@@ -254,19 +254,11 @@ export function generateCityInterior(
     }
   }
 
-  // 4b. Main avenues — axis-aligned, 2 tiles wide, from plaza to gates (no wobble = no gaps)
-  // North avenue
-  drawVRoad(midX, 2, midY - plazaR);
-  drawVRoad(midX + 1, 2, midY - plazaR);
-  // South avenue
-  drawVRoad(midX, midY + plazaR, H - 3);
-  drawVRoad(midX + 1, midY + plazaR, H - 3);
-  // West avenue
-  drawHRoad(midY, 2, midX - plazaR);
-  drawHRoad(midY + 1, 2, midX - plazaR);
-  // East avenue
-  drawHRoad(midY, midX + plazaR, W - 3);
-  drawHRoad(midY + 1, midX + plazaR, W - 3);
+  // 4b. Main avenues — 1 tile wide for a compact medieval feel
+  drawVRoad(midX, 2, midY - plazaR);       // North
+  drawVRoad(midX, midY + plazaR, H - 3);   // South
+  drawHRoad(midY, 2, midX - plazaR);       // West
+  drawHRoad(midY, midX + plazaR, W - 3);   // East
 
   // 4c. Ring roads — axis-aligned rectangles (perfect tile coverage, no gaps)
   const ringDistances = cityRadius > 30 ? [0.35, 0.65] : [0.5];
@@ -280,34 +272,16 @@ export function generateCityInterior(
     drawVRoad(right, top, bot);      // right edge
   }
 
-  // 4d. Side streets — axis-aligned branches creating city blocks
-  // Between each pair of roads, add perpendicular streets every ~8 tiles
-  const blockSize = Math.max(6, Math.min(10, Math.floor(cityRadius * 0.25)));
+  // 4d. Side streets — wide spacing so blocks are large neighborhoods, not tiny boxes
+  const blockSize = Math.max(10, Math.min(16, Math.floor(cityRadius * 0.4)));
 
-  // Horizontal side streets (between north/south avenues and ring roads)
   for (let y = 4; y < H - 4; y += blockSize) {
-    if (Math.abs(y - midY) < plazaR + 2) continue; // skip castle plaza area
-    // Don't draw a full cross-city road, just short block connectors
-    // Draw between the ring road and the outer wall
-    for (const ringPct of ringDistances) {
-      const r = Math.floor(cityRadius * ringPct);
-      // Left blocks: from wall to ring road
-      if (y >= midY - r - 1 && y <= midY + r + 1) {
-        drawHRoad(y, 3, midX - plazaR - 1);
-        drawHRoad(y, midX + plazaR + 2, W - 4);
-      }
-    }
+    if (Math.abs(y - midY) < plazaR + 2) continue;
+    drawHRoad(y, 3, W - 4);
   }
-  // Vertical side streets
   for (let x = 4; x < W - 4; x += blockSize) {
     if (Math.abs(x - midX) < plazaR + 2) continue;
-    for (const ringPct of ringDistances) {
-      const r = Math.floor(cityRadius * ringPct);
-      if (x >= midX - r - 1 && x <= midX + r + 1) {
-        drawVRoad(x, 3, midY - plazaR - 1);
-        drawVRoad(x, midY + plazaR + 2, H - 4);
-      }
-    }
+    drawVRoad(x, 3, H - 4);
   }
 
   // 4e. Fill 1-tile road gaps — any grass tile with road on 2+ opposite sides
@@ -480,54 +454,48 @@ export function generateCityInterior(
     }
   }
 
-  // Fill remaining small repo buildings across blocks, round-robin style
-  // Each block gets at most 2-3 buildings per pass to spread them out
+  // Fill small repo buildings — pack each block FULL before moving to the next.
+  // This creates dense neighborhoods where buildings touch edge-to-edge.
   let smallIdx = 0;
-  const maxPerBlock = 3;
-  for (let pass = 0; pass < 4 && smallIdx < smallRepos.length; pass++) {
-    for (const block of cityBlocks) {
-      if (smallIdx >= smallRepos.length) break;
-      let placedInBlock = 0;
+  for (const block of cityBlocks) {
+    if (smallIdx >= smallRepos.length) break;
 
-      let curY = block.y;
-      while (curY + 3 <= block.y + block.h && smallIdx < smallRepos.length && placedInBlock < maxPerBlock) {
-        let curX = block.x;
-        let rowMaxH = 3;
+    let curY = block.y;
+    while (curY + 2 <= block.y + block.h && smallIdx < smallRepos.length) {
+      let curX = block.x;
+      let rowMaxH = 2;
 
-        while (curX + 3 <= block.x + block.w && smallIdx < smallRepos.length && placedInBlock < maxPerBlock) {
-          const { repo, fp } = smallRepos[smallIdx];
+      while (curX + 2 <= block.x + block.w && smallIdx < smallRepos.length) {
+        const { repo, fp } = smallRepos[smallIdx];
 
-          if (curX + fp.w <= block.x + block.w &&
-              curY + fp.h <= block.y + block.h &&
-              canPlace(curX, curY, fp.w, fp.h)) {
-            commitBuilding(repo, fp, curX, curY);
-            rowMaxH = Math.max(rowMaxH, fp.h);
-            curX += fp.w;
-            smallIdx++;
-            placedInBlock++;
-            continue;
-          }
-
-          // Try next few in queue for a smaller fit
-          let fitted = false;
-          for (let j = smallIdx + 1; j < smallRepos.length && j < smallIdx + 8; j++) {
-            const alt = smallRepos[j];
-            if (curX + alt.fp.w <= block.x + block.w &&
-                curY + alt.fp.h <= block.y + block.h &&
-                canPlace(curX, curY, alt.fp.w, alt.fp.h)) {
-              commitBuilding(alt.repo, alt.fp, curX, curY);
-              rowMaxH = Math.max(rowMaxH, alt.fp.h);
-              curX += alt.fp.w;
-              smallRepos.splice(j, 1);
-              placedInBlock++;
-              fitted = true;
-              break;
-            }
-          }
-          if (!fitted) curX++;
+        if (curX + fp.w <= block.x + block.w &&
+            curY + fp.h <= block.y + block.h &&
+            canPlace(curX, curY, fp.w, fp.h)) {
+          commitBuilding(repo, fp, curX, curY);
+          rowMaxH = Math.max(rowMaxH, fp.h);
+          curX += fp.w;
+          smallIdx++;
+          continue;
         }
-        curY += rowMaxH;
+
+        // Try next few in queue for a smaller fit
+        let fitted = false;
+        for (let j = smallIdx + 1; j < smallRepos.length && j < smallIdx + 8; j++) {
+          const alt = smallRepos[j];
+          if (curX + alt.fp.w <= block.x + block.w &&
+              curY + alt.fp.h <= block.y + block.h &&
+              canPlace(curX, curY, alt.fp.w, alt.fp.h)) {
+            commitBuilding(alt.repo, alt.fp, curX, curY);
+            rowMaxH = Math.max(rowMaxH, alt.fp.h);
+            curX += alt.fp.w;
+            smallRepos.splice(j, 1);
+            fitted = true;
+            break;
+          }
+        }
+        if (!fitted) curX++;
       }
+      curY += rowMaxH;
     }
   }
 
@@ -549,10 +517,122 @@ export function generateCityInterior(
     smallIdx++;
   }
 
-  // No filler cottages — every building represents a real repo.
-  // Cities grow organically as users join and contribute repos.
+  // ── Step D: TETRIS-FILL NEIGHBORHOODS ──
+  // Fill each empty block like a Tetris board — different sized buildings
+  // pack together to fill the block completely. Each row of the block
+  // gets buildings of varying widths that sum to EXACTLY the block width.
+  // This creates organized, dense neighborhoods with mixed building sizes.
+  //
+  // Row heights alternate between 3 and 2 tiles. Within each row, buildings
+  // have widths of 2, 3, or 4 tiles that perfectly tile the row width.
 
-  console.log(`[CityGenerator] ${kingdom.language}: ${sortedRepos.length} repos → ${buildings.length} buildings in ${W}×${H} city (${roadCount} road tiles, ${cityBlocks.length} blocks)`);
+  /** Generate building widths that sum to exactly `totalWidth` */
+  function fillRowWidths(totalWidth: number, seed: number): number[] {
+    const widths: number[] = [];
+    let remaining = totalWidth;
+    let i = 0;
+    while (remaining >= 2) {
+      const pick = (seed + i * 7) % 6;
+      let w: number;
+      if (remaining >= 4 && pick === 0) w = 4;       // occasionally 4-wide guild
+      else if (remaining >= 3 && pick <= 3) w = 3;    // prefer 3-wide cottage
+      else w = 2;                                      // 2-wide hovel
+
+      // Never leave a remainder of 1 (can't place 1-wide building)
+      if (remaining - w === 1) {
+        w = remaining >= 3 ? 3 : 2;
+      }
+      w = Math.min(w, remaining);
+      widths.push(w);
+      remaining -= w;
+      i++;
+    }
+    return widths;
+  }
+
+  // Re-scan for empty blocks after all real buildings are placed
+  const fillerVisitGrid = new Uint8Array(W * H);
+  const emptyBlocks: CityBlock[] = [];
+  for (let y = 3; y < H - 3; y++) {
+    for (let x = 3; x < W - 3; x++) {
+      const idx = y * W + x;
+      if (fillerVisitGrid[idx]) continue;
+      if (terrain[y][x] !== baseTile) continue;
+      if (occupiedGrid[idx]) continue;
+      let bw = 0;
+      while (x + bw < W - 3 && terrain[y][x + bw] === baseTile && !occupiedGrid[y * W + (x + bw)] && !fillerVisitGrid[y * W + (x + bw)]) bw++;
+      let bh = 1;
+      while (y + bh < H - 3) {
+        let fullRow = true;
+        for (let dx = 0; dx < bw; dx++) {
+          const ti = (y + bh) * W + (x + dx);
+          if (terrain[y + bh][x + dx] !== baseTile || occupiedGrid[ti] || fillerVisitGrid[ti]) { fullRow = false; break; }
+        }
+        if (!fullRow) break;
+        bh++;
+      }
+      for (let dy = 0; dy < bh; dy++)
+        for (let dx = 0; dx < bw; dx++)
+          fillerVisitGrid[(y + dy) * W + (x + dx)] = 1;
+      if (bw >= 2 && bh >= 2) {
+        const dist = Math.abs(x + bw / 2 - midX) + Math.abs(y + bh / 2 - midY);
+        emptyBlocks.push({ x, y, w: bw, h: bh, dist });
+      }
+    }
+  }
+  emptyBlocks.sort((a, b) => a.dist - b.dist);
+
+  let fillerCount = 0;
+
+  // Row heights cycle: 3, 3, 2, 3, 2 — gives variety
+  const ROW_HEIGHTS = [3, 3, 2, 3, 2];
+
+  for (let bi = 0; bi < emptyBlocks.length; bi++) {
+    const block = emptyBlocks[bi];
+
+    // ~15% of blocks near edges become gardens — core stays dense
+    const edgeFactor = block.dist / (cityRadius * 1.5);
+    const skipSeed = block.x * 11 + block.y * 23 + bi;
+    if (edgeFactor > 0.6 && (skipSeed % 4) === 0) continue;
+
+    let curY = block.y;
+    let rowIdx = 0;
+
+    while (curY < block.y + block.h) {
+      let rh = ROW_HEIGHTS[rowIdx % ROW_HEIGHTS.length];
+      const remaining = (block.y + block.h) - curY;
+      if (remaining < rh) rh = remaining;
+      if (rh < 2) break;
+
+      const seed = block.x * 13 + curY * 7 + fillerCount;
+      const widths = fillRowWidths(block.w, seed);
+
+      let curX = block.x;
+      for (const bw of widths) {
+        if (canPlace(curX, curY, bw, rh)) {
+          const rank = footprintToRank(bw, rh);
+          for (let bdy = 0; bdy < rh; bdy++)
+            for (let bdx = 0; bdx < bw; bdx++) {
+              const idx = (curY + bdy) * W + (curX + bdx);
+              buildingGrid[idx] = 1;
+              occupiedGrid[idx] = 1;
+            }
+          buildings.push({
+            rank, purpose: 'general' as BuildingPurpose,
+            x: curX, y: curY,
+            width: bw, height: rh,
+          });
+          fillerCount++;
+        }
+        curX += bw;
+      }
+
+      curY += rh;
+      rowIdx++;
+    }
+  }
+
+  console.log(`[CityGenerator] ${kingdom.language}: ${sortedRepos.length} repos + ${fillerCount} fillers → ${buildings.length} buildings in ${W}×${H} city (${roadCount} road tiles)`);
 
   // ── 6. Connect any disconnected buildings to nearest road ──
   for (const b of buildings) {
@@ -668,9 +748,13 @@ function placeBuildingTiles(
   const W = terrain[0].length;
   const safe = (x: number, y: number) => x >= 0 && x < W && y >= 0 && y < H;
 
-  // Small buildings (cottages/guilds): just mark as house tiles, no fortress walls
-  // Large buildings (keep+): walls on edges, towers on corners
-  const isLarge = rank === 'citadel' || rank === 'castle' || rank === 'palace' || rank === 'keep';
+  // Only the central castle (citadel rank) gets fortress walls/towers on the
+  // tilemap. ALL other buildings sit on grass — the sprite overlay covers the
+  // footprint, and green peeking through at edges looks like natural yard.
+  // Only the #1 repo (with +4 bonus) reaches castle/citadel rank
+  const isCastle = rank === 'citadel' || rank === 'castle';
+
+  if (!isCastle) return; // Everything except the castle: grass stays
 
   for (let dy = 0; dy < bh; dy++) {
     for (let dx = 0; dx < bw; dx++) {
@@ -679,26 +763,20 @@ function placeBuildingTiles(
       const isEdge = dx === 0 || dx === bw - 1 || dy === 0 || dy === bh - 1;
       const isGate = dx === Math.floor(bw / 2) && dy === bh - 1;
 
-      if (isLarge) {
-        // Large buildings get fortress-style walls
-        if (isGate) {
-          terrain[by + dy][bx + dx] = TILES.CASTLE_GATE;
-        } else if (isCorner && bw >= 4) {
-          terrain[by + dy][bx + dx] = TILES.CASTLE_TOWER;
-        } else if (isEdge) {
-          terrain[by + dy][bx + dx] = TILES.CASTLE_WALL;
-        } else {
-          terrain[by + dy][bx + dx] = TILES.CASTLE_ROOF;
-        }
+      if (isGate) {
+        terrain[by + dy][bx + dx] = TILES.CASTLE_GATE;
+      } else if (isCorner && bw >= 4) {
+        terrain[by + dy][bx + dx] = TILES.CASTLE_TOWER;
+      } else if (isEdge) {
+        terrain[by + dy][bx + dx] = TILES.CASTLE_WALL;
       } else {
-        // Small buildings — just fill with house tile (no walled compound)
-        terrain[by + dy][bx + dx] = TILES.HOUSE_LARGE;
+        terrain[by + dy][bx + dx] = TILES.CASTLE_ROOF;
       }
     }
   }
 
   // Banner above gate for larger buildings only
-  if (isLarge && bw >= 5) {
+  if (isCastle && bw >= 5) {
     const bannerX = bx + Math.floor(bw / 2);
     const bannerY = by - 1;
     if (safe(bannerX, bannerY)) terrain[bannerY][bannerX] = TILES.BANNER;

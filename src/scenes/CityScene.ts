@@ -633,7 +633,9 @@ export class CityScene extends Phaser.Scene {
       const isUserRepo = this.isUserBuilding(b);
       nameColor = isUserRepo ? '#ffd700' : (RANK_COLORS[b.rank] || '#e8d5a3');
     } else {
-      return; // no useful info
+      // Filler building — unnamed commoner home
+      name = 'Commoner Home';
+      nameColor = '#8a8070';
     }
 
     const labelScale = 4;
@@ -1363,11 +1365,17 @@ export class CityScene extends Phaser.Scene {
       const panel = document.getElementById('info-panel')!;
       const avatarEl = document.getElementById('info-avatar') as HTMLImageElement;
       avatarEl.style.display = 'none';
-      document.getElementById('info-name')!.textContent = `🏛 ${b.publicName || 'Civic Building'}`;
-      document.getElementById('info-tier')!.textContent =
-        `Public building in the ${this.city.language} Kingdom`;
-      document.getElementById('info-stats')!.innerHTML =
-        stat('Type', b.publicName || 'Civic') + stat('Size', `${b.width}×${b.height} tiles`);
+      const isFiller = !b.isPublic && !b.repoMetrics;
+      document.getElementById('info-name')!.textContent = isFiller
+        ? '🏠 Commoner Home'
+        : `🏛 ${b.publicName || 'Civic Building'}`;
+      document.getElementById('info-tier')!.textContent = isFiller
+        ? `Unclaimed plot in the ${this.city.language} Kingdom`
+        : `Public building in the ${this.city.language} Kingdom`;
+      document.getElementById('info-stats')!.innerHTML = isFiller
+        ? stat('Status', 'Available') + stat('Size', `${b.width}×${b.height} tiles`) +
+          '<div style="font-size:9px;color:#8a8070;margin-top:6px">Sign in with GitHub to claim this plot with your repo!</div>'
+        : stat('Type', b.publicName || 'Civic') + stat('Size', `${b.width}×${b.height} tiles`);
       document.getElementById('info-king')!.innerHTML = '';
       if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
       panel.style.display = 'block';
@@ -1680,7 +1688,8 @@ export class CityScene extends Phaser.Scene {
       '<input type="text" id="legend-search" placeholder="Search buildings & citizens..." />' +
       '</div>';
 
-    html += `<h3>${this.city.language} — ${buildings.length} Buildings</h3>`;
+    const repoCount = buildings.filter(b => b.repoMetrics).length;
+    html += `<h3>${this.city.language} — ${repoCount} Repos · ${buildings.length} Buildings</h3>`;
 
     // Group by rank (repo buildings only)
     const repoBuildings = buildings.filter(b => !b.isPublic && b.repoMetrics);
