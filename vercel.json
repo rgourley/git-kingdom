@@ -3,7 +3,8 @@
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/editor.html", "destination": "/editor.html" },
-    { "source": "/:path*", "destination": "/index.html" }
+    { "source": "/:path*", "destination": "/api/page" }
   ]
 }

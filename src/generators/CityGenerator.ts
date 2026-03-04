@@ -24,43 +24,54 @@ const MIN_STARS = 0;
 // #1 repo in each kingdom gets a +4 bonus → the castle.
 // Thresholds are deliberately high — big buildings are earned.
 //
-//   Stars     Footprint    Rank         What it is
-//   ────────────────────────────────────────────────
-//   100k+     8×10         castle       Legendary (React, Linux)
-//   50k+      6×8          keep         Major framework
-//   20k+      5×7 / 5×5    manor        Popular library
-//   10k+      4×6 / 4×4    guild        Well-known tool
-//   5k+       4×4 / 3×5    guild        Established project
-//   2k+       3×5 / 3×3    cottage      Active project
-//   500+      3×3          cottage      Growing project
-//   50+       2×3          hovel        Small project
-//   0+        2×2          hovel        Beginner repo
+//   Stars      Footprint        Rank        What it is
+//   ──────────────────────────────────────────────────────
+//   200k+      20×20            citadel     Top-10 world (Linux, React)
+//   150k+      18×18            citadel     Legendary
+//   100k+      16×16            citadel     Iconic project
+//   75k+       14×14            citadel     World-famous
+//   50k+       12×12            castle      Major framework
+//   35k+       10×10            castle      Star framework
+//   25k+       8×10 / 8×8       palace      Popular library
+//   15k+       7×7 / 6×8        keep        Well-known tool
+//   8k+        6×6 / 5×7        keep        Established tool
+//   5k+        5×5 / 4×6        manor       Established project
+//   2k+        4×4 / 3×5        guild       Active project
+//   500+       3×5 / 3×3        cottage     Growing project
+//   100+       3×3              cottage     Small project
+//   21+        2×2              hovel       Tiny project
+//   0–20       1×1              camp        Zero-star repo
+// Non-castle buildings: max out at 18×18.  Only the #1 castle reaches 20×20.
 const FOOTPRINT_PRESETS: { minStars: number; shapes: { w: number; h: number }[] }[] = [
-  { minStars: 100000, shapes: [{ w: 8,  h: 10 }] },                    // castle
-  { minStars: 50000,  shapes: [{ w: 6,  h: 8  }] },                    // keep
-  { minStars: 20000,  shapes: [{ w: 5,  h: 7  }, { w: 5,  h: 5  }] }, // manor
-  { minStars: 10000,  shapes: [{ w: 4,  h: 6  }, { w: 4,  h: 4  }] }, // guild
-  { minStars: 5000,   shapes: [{ w: 4,  h: 4  }, { w: 3,  h: 5  }] }, // guild/cottage
-  { minStars: 2000,   shapes: [{ w: 3,  h: 5  }, { w: 3,  h: 3  }] }, // cottage
-  { minStars: 500,    shapes: [{ w: 3,  h: 3  }] },                    // cottage
-  { minStars: 50,     shapes: [{ w: 2,  h: 3  }, { w: 3,  h: 3  }] }, // hovel/cottage
-  { minStars: 0,      shapes: [{ w: 2,  h: 2  }] },                    // hovel
+  { minStars: 150000, shapes: [{ w: 18, h: 18 }] },                    // citadel (max for non-castle)
+  { minStars: 100000, shapes: [{ w: 16, h: 16 }] },                    // citadel
+  { minStars: 75000,  shapes: [{ w: 14, h: 14 }] },                    // citadel
+  { minStars: 50000,  shapes: [{ w: 12, h: 12 }] },                    // castle
+  { minStars: 35000,  shapes: [{ w: 10, h: 10 }] },                    // castle
+  { minStars: 25000,  shapes: [{ w: 8,  h: 10 }, { w: 8,  h: 8  }] }, // palace
+  { minStars: 15000,  shapes: [{ w: 7,  h: 7  }, { w: 6,  h: 8  }] }, // keep
+  { minStars: 8000,   shapes: [{ w: 6,  h: 6  }, { w: 5,  h: 7  }] }, // keep
+  { minStars: 5000,   shapes: [{ w: 5,  h: 5  }, { w: 4,  h: 6  }] }, // manor
+  { minStars: 2000,   shapes: [{ w: 4,  h: 4  }, { w: 3,  h: 5  }] }, // guild
+  { minStars: 500,    shapes: [{ w: 3,  h: 5  }, { w: 3,  h: 3  }] }, // cottage
+  { minStars: 100,    shapes: [{ w: 3,  h: 3  }] },                    // cottage
+  { minStars: 21,     shapes: [{ w: 2,  h: 2  }] },                    // hovel
+  { minStars: 0,      shapes: [{ w: 1,  h: 1  }] },                    // camp
 ];
 
 function getBuildingFootprint(stars: number, isTopRepo: boolean, seed: number): { w: number; h: number } {
+  // #1 repo is the castle — always 20×20 (the biggest building in the kingdom)
+  if (isTopRepo) {
+    return { w: 20, h: 20 };
+  }
+
   let shapes = [{ w: 2, h: 2 }]; // fallback (hovel)
   for (const t of FOOTPRINT_PRESETS) {
     if (stars >= t.minStars) { shapes = t.shapes; break; }
   }
   // Pick a shape deterministically from the options
   const shape = shapes[Math.abs(seed) % shapes.length];
-  let { w, h } = shape;
-  // #1 repo is the castle — gets bonus footprint
-  if (isTopRepo) {
-    w = Math.min(20, w + 4);
-    h = Math.min(20, h + 4);
-  }
-  return { w, h };
+  return { w: shape.w, h: shape.h };
 }
 
 // ─── Footprint → rank classification ────────────────────────

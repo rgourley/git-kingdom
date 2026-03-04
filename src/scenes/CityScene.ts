@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import { LanguageKingdom, CityInterior, CityBuilding, TILES } from '../types';
-import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePacks, GRASS_B_FRAMES, GRASS_FLOWER_FRAMES, TREE_DEFS, TOWN_B_DECO, createBuildingTextures, getBuildingTextureKey, loadTemplateLibrary, createTemplateVariantTextures, pickBuildingTextureKey } from '../generators/TilesetGenerator';
+import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePacks, GRASS_B_FRAMES, GRASS_FLOWER_FRAMES, TREE_DEFS, TOWN_B_DECO, createBuildingTextures, getBuildingTextureKey, loadTemplateLibrary, createTemplateVariantTextures, pickBuildingTextureKey, VariantEntry } from '../generators/TilesetGenerator';
 import { generateCityInterior, placePublicBuildings } from '../generators/CityGenerator';
 import { expandTemplateVariations } from '../editor/VariationEngine';
+import { trackBuildingClicked, trackCitizenClicked, trackCityExited, trackWorldSearch, trackPageView } from '../analytics';
 
 // Stepped zoom levels for crisp pixel-art rendering (retro style)
 const CITY_ZOOM_LEVELS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
@@ -39,6 +40,7 @@ const RANK_COLORS: Record<string, string> = {
   guild: '#a89060',
   cottage: '#988068',
   hovel: '#887755',
+  camp: '#776644',
 };
 
 const RANK_ICONS: Record<string, string> = {
@@ -106,7 +108,7 @@ export class CityScene extends Phaser.Scene {
   private cityH = 0;
   // Building sprite refs (for async template texture swapping + hover)
   private buildingSpriteRefs: { sprite: Phaser.GameObjects.Image; rank: string; seed: number; buildingIndex: number }[] = [];
-  private templateVariantsByRank: Map<string, string[]> | null = null;
+  private templateVariantsByRank: Map<string, VariantEntry[]> | null = null;
   // Hover tooltip
   private hoverTooltip!: Phaser.GameObjects.Container;
   private hoverTooltipBg!: Phaser.GameObjects.Graphics;
@@ -549,6 +551,18 @@ export class CityScene extends Phaser.Scene {
     return owner === this.highlightUser;
   }
 
+  /** Scale a building sprite to fit within its footprint (prevents overlap) */
+  private fitSpriteToFootprint(sprite: Phaser.GameObjects.Image, b: CityBuilding) {
+    const footW = b.width * TILE_SIZE;
+    const footH = b.height * TILE_SIZE;
+    if (sprite.width > footW || sprite.height > footH) {
+      const scale = Math.min(footW / sprite.width, footH / sprite.height);
+      sprite.setScale(scale);
+    } else {
+      sprite.setScale(1);
+    }
+  }
+
   private placeBuildingSprites(buildings: CityBuilding[], mapHeight: number) {
     this.buildingSpriteRefs = [];
     for (let i = 0; i < buildings.length; i++) {
@@ -556,7 +570,7 @@ export class CityScene extends Phaser.Scene {
       // Use building index as seed for variety
       const seed = i * 7 + b.x * 3 + b.y;
       const texKey = this.templateVariantsByRank
-        ? pickBuildingTextureKey(b.rank, seed, this.templateVariantsByRank)
+        ? pickBuildingTextureKey(b.rank, seed, this.templateVariantsByRank, b.width, b.height)
         : getBuildingTextureKey(b.rank, seed);
 
       if (!this.textures.exists(texKey)) continue;
@@ -568,6 +582,9 @@ export class CityScene extends Phaser.Scene {
 
       const sprite = this.add.image(footCenterX, footBottomY, texKey);
       sprite.setOrigin(0.5, 1); // anchor at bottom-center
+      // Scale sprite to fit within footprint — prevents tall sprites from
+      // overlapping buildings in the row above
+      this.fitSpriteToFootprint(sprite, b);
       // Y-sort depth: buildings further down render on top
       sprite.setDepth(4 + (b.y + b.height) / mapHeight * 2);
 
@@ -722,9 +739,12 @@ export class CityScene extends Phaser.Scene {
 
         // Swap building sprites to use template textures where available
         for (const ref of this.buildingSpriteRefs) {
-          const newKey = pickBuildingTextureKey(ref.rank, ref.seed, variantsByRank);
+          const b = buildings[ref.buildingIndex];
+          const newKey = pickBuildingTextureKey(ref.rank, ref.seed, variantsByRank, b?.width, b?.height);
           if (newKey !== ref.sprite.texture.key && this.textures.exists(newKey)) {
             ref.sprite.setTexture(newKey);
+            // Re-scale after texture swap — new texture may have different dimensions
+            if (b) this.fitSpriteToFootprint(ref.sprite, b);
           }
         }
 
@@ -770,6 +790,7 @@ export class CityScene extends Phaser.Scene {
             const footBottomY = (b.y + b.height) * TILE_SIZE;
             const sprite = this.add.image(footCenterX, footBottomY, texKey);
             sprite.setOrigin(0.5, 1);
+            this.fitSpriteToFootprint(sprite, b);
             sprite.setDepth(4 + (b.y + b.height) / mapHeight * 2);
             // Make interactive for hover
             sprite.setInteractive({ useHandCursor: true });
@@ -1324,6 +1345,11 @@ export class CityScene extends Phaser.Scene {
     const citizen = this.city.citizens.find(ci => ci.login === c.login);
     if (!citizen) return;
 
+    trackCitizenClicked({
+      user_login: citizen.login,
+      contributions: citizen.totalContributions,
+    });
+
     const panel = document.getElementById('info-panel')!;
     const isKing = this.city.king?.login === c.login;
     const isUser = this.highlightUser === c.login.toLowerCase();
@@ -1385,6 +1411,13 @@ export class CityScene extends Phaser.Scene {
     const panel = document.getElementById('info-panel')!;
     const repo = b.repoMetrics.repo;
     const isUserRepo = this.isUserBuilding(b);
+
+    trackBuildingClicked({
+      repo_full_name: repo.full_name,
+      language: this.city.language,
+      stars: repo.stargazers_count,
+      rank: b.rank,
+    });
 
     // Show repo owner's avatar
     const avatarEl = document.getElementById('info-avatar') as HTMLImageElement;
@@ -1541,6 +1574,8 @@ export class CityScene extends Phaser.Scene {
       backBtn.className = 'rpgui-button header-back';
       backBtn.innerHTML = '<p>← Back</p>';
       backBtn.onclick = () => {
+        trackCityExited();
+        trackPageView('/', 'Git Kingdom | World Map');
         const legend = document.getElementById('legend');
         if (legend) legend.style.display = 'none';
         this.hideInfoPanel();
@@ -1616,6 +1651,7 @@ export class CityScene extends Phaser.Scene {
             );
 
             if (matchKingdom) {
+              trackWorldSearch({ query, found: true });
               // Go back to world map and the WorldScene search will handle the pan
               window.history.pushState({}, '', `/${query}`);
               this.scene.start('WorldScene', {
@@ -1624,6 +1660,7 @@ export class CityScene extends Phaser.Scene {
                 highlightUser: query,
               });
             } else {
+              trackWorldSearch({ query, found: false });
               searchInput.style.borderColor = '#ff4444';
               searchInput.placeholder = 'Not found in world';
               setTimeout(() => {
@@ -1695,7 +1732,7 @@ export class CityScene extends Phaser.Scene {
     const repoBuildings = buildings.filter(b => !b.isPublic && b.repoMetrics);
     const publicBuildings = buildings.filter(b => b.isPublic);
 
-    const ranks: string[] = ['citadel', 'castle', 'palace', 'keep', 'manor', 'guild', 'cottage', 'hovel'];
+    const ranks: string[] = ['citadel', 'castle', 'palace', 'keep', 'manor', 'guild', 'cottage', 'hovel', 'camp'];
     for (const rank of ranks) {
       const rankBuildings = repoBuildings.filter(b => b.rank === rank);
       if (rankBuildings.length === 0) continue;

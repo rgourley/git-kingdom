@@ -215,9 +215,7 @@ export function footprintToRank(w: number, h: number): BuildingRank {
   if (side >= 5)  return 'manor';
   if (side >= 4)  return 'guild';
   if (side >= 3)  return 'cottage';
-  // 2×3 rounds to 3, so check exact average for hovel vs camp
-  const exact = (w + h) / 2;
-  if (exact >= 2.5) return 'hovel';
+  if (side >= 2)  return 'hovel';   // 2×2 shacks / small homes
   return 'camp';
 }
 

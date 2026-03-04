@@ -204,8 +204,7 @@ export const DEFAULT_REPOS: [string, string][] = [
   ['naptha', 'tesseract.js'],        // 35k★  OCR
   ['dcloudio', 'uni-app'],           // 40k★  cross-platform app
   ['NervJS', 'taro'],                // 36k★  cross-platform
-  ['goldbergyoni', 'nodebestpractices'], // 100k★ best practices
-  ['ryanmcdermott', 'clean-code-javascript'], // 92k★ clean code
+  // Removed: nodebestpractices (content list), clean-code-javascript (content)
   ['responsively-org', 'responsively-app'], // 23k★ responsive viewer
   ['webtorrent', 'webtorrent'],      // 30k★  streaming torrent
   ['badges', 'shields'],             // 24k★  badge service
@@ -302,7 +301,7 @@ export const DEFAULT_REPOS: [string, string][] = [
   ['oven-sh', 'bun'],                // 75k★  JS runtime
   ['turbopackjs', 'turbopack'],      // 1k★   bundler
   ['tremorlabs', 'tremor-raw'],      // 1k★   chart components
-  ['total-typescript', 'beginners-typescript-tutorial'], // 8k★ tutorial
+  // Removed: beginners-typescript-tutorial (content/tutorial)
   // Additional TS repos for city density
   ['withastro', 'astro'],             // 48k★  content-focused framework
   ['facebook', 'docusaurus'],          // 57k★  documentation framework (meta)
@@ -762,17 +761,16 @@ export const DEFAULT_REPOS: [string, string][] = [
   ['sindresorhus', 'pure'],          // 13k★  zsh prompt
   ['bats-core', 'bats-core'],        // 5k★   bash testing
   ['direnv', 'direnv'],              // 13k★  env var manager
-  ['kamranahmedse', 'developer-roadmap'], // 300k★ roadmaps
+  // Removed: developer-roadmap (content/roadmap, not real code)
   ['moovweb', 'gvm'],                // 10k★  Go version manager
   ['creationix', 'nvm'],             // 81k★  Node version mgr
   ['docker', 'docker-bench-security'], // 9k★ Docker security
-  ['papers-we-love', 'papers-we-love'], // 89k★ CS papers
-  ['guardrailsio', 'awesome-golang-security'], // 2k★ Go security
+  // Removed: papers-we-love (paper collection), awesome-golang-security (awesome-list)
   ['spaceship-prompt', 'spaceship-prompt'], // 20k★ zsh prompt
   ['sorin-ionescu', 'prezto'],       // 14k★  zsh framework
   ['b4b4r07', 'enhancd'],            // 3k★   cd enhancement
   ['huyng', 'bashmarks'],            // 2k★   bookmarks
-  ['alebcay', 'awesome-shell'],      // 33k★  shell resources
+  // Removed: awesome-shell (awesome-list)
   ['mise-plugins', 'registry'],      // ~500★ mise plugin registry
 
   // ── PHP ───────────────────────────────────────────────────────

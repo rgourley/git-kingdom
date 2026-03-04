@@ -2,196 +2,6 @@
   "version": 1,
   "templates": [
     {
-      "id": "red-cottage-01",
-      "name": "Red Cottage",
-      "width": 3,
-      "height": 5,
-      "layers": {
-        "base": [
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ]
-        ],
-        "main": [
-          [
-            {
-              "sheet": "town_B",
-              "frame": 0
-            },
-            {
-              "sheet": "town_B",
-              "frame": 1
-            },
-            {
-              "sheet": "town_B",
-              "frame": 2
-            }
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 16
-            },
-            {
-              "sheet": "town_B",
-              "frame": 17
-            },
-            {
-              "sheet": "town_B",
-              "frame": 18
-            }
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 32
-            },
-            {
-              "sheet": "town_B",
-              "frame": 33
-            },
-            {
-              "sheet": "town_B",
-              "frame": 34
-            }
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 48
-            },
-            {
-              "sheet": "town_B",
-              "frame": 49
-            },
-            {
-              "sheet": "town_B",
-              "frame": 50
-            }
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 64
-            },
-            {
-              "sheet": "town_B",
-              "frame": 65
-            },
-            {
-              "sheet": "town_B",
-              "frame": 66
-            }
-          ]
-        ],
-        "detail": [
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            {
-              "sheet": "town_B",
-              "frame": 353
-            },
-            null
-          ]
-        ]
-      }
-    },
-    {
-      "id": "fountain-01",
-      "name": "Fountain",
-      "width": 2,
-      "height": 2,
-      "tags": [
-        "public"
-      ],
-      "layers": {
-        "base": [
-          [
-            null,
-            null
-          ],
-          [
-            null,
-            null
-          ]
-        ],
-        "main": [
-          [
-            {
-              "sheet": "town_B",
-              "frame": 544
-            },
-            {
-              "sheet": "town_B",
-              "frame": 545
-            }
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 560
-            },
-            {
-              "sheet": "town_B",
-              "frame": 561
-            }
-          ]
-        ],
-        "detail": [
-          [
-            null,
-            null
-          ],
-          [
-            null,
-            null
-          ]
-        ]
-      }
-    },
-    {
       "id": "brown-castle-01",
       "name": "Brown Castle",
       "width": 8,
@@ -2204,11 +2014,11 @@
             },
             {
               "sheet": "town_B",
-              "frame": 363
+              "frame": 285
             },
             {
               "sheet": "town_B",
-              "frame": 363
+              "frame": 285
             },
             {
               "sheet": "town_B",
@@ -3762,7 +3572,10 @@
               "sheet": "town_B",
               "frame": 56
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 13
+            }
           ],
           [
             {
@@ -3774,7 +3587,10 @@
               "sheet": "town_B",
               "frame": 72
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 79
+            }
           ],
           [
             null,
@@ -3794,10 +3610,7 @@
             null,
             null,
             null,
-            {
-              "sheet": "grass_B",
-              "frame": 7
-            }
+            null
           ],
           [
             null,
@@ -3806,16 +3619,16 @@
               "frame": 3
             },
             null,
-            {
-              "sheet": "grass_B",
-              "frame": 125
-            }
+            null
           ],
           [
             null,
             null,
             null,
-            null
+            {
+              "sheet": "town_B",
+              "frame": 327
+            }
           ]
         ]
       }
@@ -4000,19 +3813,9 @@
       "id": "building-01",
       "name": "building-01",
       "width": 3,
-      "height": 5,
+      "height": 3,
       "layers": {
         "base": [
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
           [
             null,
             null,
@@ -4031,29 +3834,46 @@
         ],
         "main": [
           [
-            null,
-            null,
-            null
+            {
+              "sheet": "town_B",
+              "frame": 163
+            },
+            {
+              "sheet": "town_B",
+              "frame": 165
+            },
+            {
+              "sheet": "town_B",
+              "frame": 165
+            }
           ],
           [
-            null,
-            null,
-            null
+            {
+              "sheet": "town_B",
+              "frame": 150
+            },
+            {
+              "sheet": "town_B",
+              "frame": 154
+            },
+            {
+              "sheet": "town_B",
+              "frame": 155
+            }
           ],
           [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
+            {
+              "sheet": "town_B",
+              "frame": 310
+            },
+            {
+              "sheet": "town_B",
+              "frame": 314
+            },
+            {
+              "sheet": "town_B",
+              "frame": 312
+            }
           ]
         ],
         "detail": [
@@ -4068,19 +3888,18 @@
             null
           ],
           [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null
+            {
+              "sheet": "town_B",
+              "frame": 406
+            },
+            {
+              "sheet": "doors_outside",
+              "frame": 6
+            },
+            {
+              "sheet": "town_B",
+              "frame": 491
+            }
           ]
         ]
       }
@@ -4178,68 +3997,92 @@
         ],
         "main": [
           [
-            null,
             {
               "sheet": "town_B",
-              "frame": 163
+              "frame": 251
             },
             {
               "sheet": "town_B",
-              "frame": 164
+              "frame": 249
             },
             {
               "sheet": "town_B",
-              "frame": 165
+              "frame": 250
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 251
+            },
+            {
+              "sheet": "town_B",
+              "frame": 251
+            }
           ],
           [
-            null,
             {
               "sheet": "town_B",
-              "frame": 179
+              "frame": 293
             },
             {
               "sheet": "town_B",
-              "frame": 180
+              "frame": 259
             },
             {
               "sheet": "town_B",
-              "frame": 181
+              "frame": 266
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 261
+            },
+            {
+              "sheet": "town_B",
+              "frame": 293
+            }
           ],
           [
-            null,
             {
               "sheet": "town_B",
-              "frame": 195
+              "frame": 310
             },
             {
               "sheet": "town_B",
-              "frame": 196
+              "frame": 298
             },
             {
               "sheet": "town_B",
-              "frame": 197
+              "frame": 298
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 298
+            },
+            {
+              "sheet": "town_B",
+              "frame": 312
+            }
           ],
           [
-            null,
             {
               "sheet": "town_B",
-              "frame": 211
+              "frame": 310
             },
             {
               "sheet": "town_B",
-              "frame": 212
+              "frame": 298
             },
             {
               "sheet": "town_B",
-              "frame": 213
+              "frame": 298
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 298
+            },
+            {
+              "sheet": "town_B",
+              "frame": 312
+            }
           ],
           [
             null,
@@ -4266,12 +4109,15 @@
           ],
           [
             null,
+            {
+              "sheet": "town_B",
+              "frame": 329
+            },
             null,
             {
               "sheet": "town_B",
-              "frame": 330
+              "frame": 329
             },
-            null,
             null
           ],
           [
@@ -4286,18 +4132,24 @@
           ],
           [
             {
-              "sheet": "grass_Flowers",
-              "frame": 58
+              "sheet": "town_B",
+              "frame": 339
             },
-            null,
+            {
+              "sheet": "town_B",
+              "frame": 358
+            },
             {
               "sheet": "town_A",
               "frame": 43
             },
-            null,
             {
-              "sheet": "grass_Flowers",
-              "frame": 61
+              "sheet": "town_B",
+              "frame": 390
+            },
+            {
+              "sheet": "town_B",
+              "frame": 337
             }
           ]
         ]
@@ -5562,233 +5414,6 @@
       }
     },
     {
-      "id": "guild-house-01",
-      "name": "Guild House",
-      "width": 4,
-      "height": 6,
-      "layers": {
-        "base": [
-          [
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            {
-              "sheet": "town_A",
-              "frame": 38
-            }
-          ],
-          [
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            null,
-            null,
-            {
-              "sheet": "town_A",
-              "frame": 38
-            }
-          ],
-          [
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            null,
-            null,
-            {
-              "sheet": "town_A",
-              "frame": 38
-            }
-          ],
-          [
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            null,
-            null,
-            {
-              "sheet": "town_A",
-              "frame": 38
-            }
-          ],
-          [
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            null,
-            null,
-            {
-              "sheet": "town_A",
-              "frame": 38
-            }
-          ],
-          [
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            {
-              "sheet": "town_A",
-              "frame": 38
-            },
-            {
-              "sheet": "town_A",
-              "frame": 38
-            }
-          ]
-        ],
-        "main": [
-          [
-            {
-              "sheet": "town_B",
-              "frame": 0
-            },
-            {
-              "sheet": "town_B",
-              "frame": 1
-            },
-            {
-              "sheet": "town_B",
-              "frame": 2
-            },
-            null
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 16
-            },
-            {
-              "sheet": "town_B",
-              "frame": 17
-            },
-            {
-              "sheet": "town_B",
-              "frame": 18
-            },
-            null
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 32
-            },
-            {
-              "sheet": "town_B",
-              "frame": 33
-            },
-            {
-              "sheet": "town_B",
-              "frame": 34
-            },
-            null
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 48
-            },
-            {
-              "sheet": "town_B",
-              "frame": 49
-            },
-            {
-              "sheet": "town_B",
-              "frame": 50
-            },
-            null
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 64
-            },
-            {
-              "sheet": "town_B",
-              "frame": 65
-            },
-            {
-              "sheet": "town_B",
-              "frame": 66
-            },
-            null
-          ],
-          [
-            null,
-            null,
-            null,
-            null
-          ]
-        ],
-        "detail": [
-          [
-            null,
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            null,
-            null,
-            null
-          ],
-          [
-            {
-              "sheet": "town_B",
-              "frame": 330
-            },
-            null,
-            null,
-            null
-          ],
-          [
-            null,
-            {
-              "sheet": "doors_outside",
-              "frame": 3
-            },
-            null,
-            null
-          ],
-          [
-            {
-              "sheet": "grass_Flowers",
-              "frame": 58
-            },
-            null,
-            null,
-            {
-              "sheet": "grass_Flowers",
-              "frame": 61
-            }
-          ]
-        ]
-      }
-    },
-    {
       "id": "tall-manor-01",
       "name": "Tall Manor",
       "width": 5,
@@ -5953,73 +5578,57 @@
         "main": [
           [
             null,
-            {
-              "sheet": "town_B",
-              "frame": 86
-            },
-            {
-              "sheet": "town_B",
-              "frame": 87
-            },
-            {
-              "sheet": "town_B",
-              "frame": 88
-            },
+            null,
+            null,
+            null,
             null
           ],
           [
+            {
+              "sheet": "town_B",
+              "frame": 80
+            },
+            {
+              "sheet": "town_B",
+              "frame": 81
+            },
+            {
+              "sheet": "town_B",
+              "frame": 82
+            },
             null,
+            null
+          ],
+          [
             {
               "sheet": "town_B",
               "frame": 102
             },
             {
               "sheet": "town_B",
-              "frame": 103
+              "frame": 106
             },
             {
               "sheet": "town_B",
-              "frame": 104
+              "frame": 89
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 89
+            },
+            {
+              "sheet": "town_B",
+              "frame": 89
+            }
           ],
           [
-            null,
-            {
-              "sheet": "town_B",
-              "frame": 118
-            },
-            {
-              "sheet": "town_B",
-              "frame": 119
-            },
-            {
-              "sheet": "town_B",
-              "frame": 120
-            },
-            null
-          ],
-          [
-            null,
             {
               "sheet": "town_B",
               "frame": 134
             },
             {
               "sheet": "town_B",
-              "frame": 135
-            },
-            {
-              "sheet": "town_B",
-              "frame": 136
-            },
-            null
-          ],
-          [
-            null,
-            {
-              "sheet": "town_B",
-              "frame": 150
+              "frame": 111
             },
             {
               "sheet": "town_B",
@@ -6027,9 +5636,34 @@
             },
             {
               "sheet": "town_B",
-              "frame": 152
+              "frame": 111
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 152
+            }
+          ],
+          [
+            {
+              "sheet": "town_B",
+              "frame": 150
+            },
+            {
+              "sheet": "town_B",
+              "frame": 111
+            },
+            {
+              "sheet": "town_B",
+              "frame": 151
+            },
+            {
+              "sheet": "town_B",
+              "frame": 111
+            },
+            {
+              "sheet": "town_B",
+              "frame": 152
+            }
           ],
           [
             null,
@@ -6069,22 +5703,25 @@
             null
           ],
           [
+            null,
             {
               "sheet": "town_B",
               "frame": 330
             },
             null,
-            null,
-            null,
+            {
+              "sheet": "town_B",
+              "frame": 330
+            },
             null
           ],
           [
             null,
-            null,
             {
               "sheet": "doors_outside",
-              "frame": 4
+              "frame": 0
             },
+            null,
             null,
             null
           ],
@@ -6093,9 +5730,15 @@
               "sheet": "grass_Flowers",
               "frame": 58
             },
+            {
+              "sheet": "town_A",
+              "frame": 45
+            },
             null,
-            null,
-            null,
+            {
+              "sheet": "grass_B",
+              "frame": 39
+            },
             {
               "sheet": "grass_Flowers",
               "frame": 61
@@ -6104,13 +5747,13 @@
           [
             null,
             {
-              "sheet": "town_B",
-              "frame": 353
+              "sheet": "town_A",
+              "frame": 45
             },
             null,
             {
-              "sheet": "town_B",
-              "frame": 353
+              "sheet": "grass_B",
+              "frame": 57
             },
             null
           ]
@@ -15259,7 +14902,10 @@
               "sheet": "town_B",
               "frame": 18
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 59
+            }
           ],
           [
             {
@@ -15274,7 +14920,10 @@
               "sheet": "town_B",
               "frame": 34
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 59
+            }
           ],
           [
             {
@@ -15289,7 +14938,10 @@
               "sheet": "town_B",
               "frame": 50
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 69
+            }
           ],
           [
             {
@@ -15304,7 +14956,10 @@
               "sheet": "town_B",
               "frame": 66
             },
-            null
+            {
+              "sheet": "town_B",
+              "frame": 69
+            }
           ],
           [
             null,
@@ -15352,7 +15007,10 @@
               "sheet": "grass_Flowers",
               "frame": 58
             },
-            null,
+            {
+              "sheet": "town_A",
+              "frame": 31
+            },
             null,
             {
               "sheet": "grass_Flowers",
@@ -15405,6 +15063,245 @@
             null,
             null
           ],
+          [
+            null,
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "id": "building-02",
+      "name": "building-02",
+      "width": 3,
+      "height": 3,
+      "layers": {
+        "base": [
+          [
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ]
+        ],
+        "main": [
+          [
+            {
+              "sheet": "town_B",
+              "frame": 3
+            },
+            {
+              "sheet": "town_B",
+              "frame": 3
+            },
+            {
+              "sheet": "town_B",
+              "frame": 5
+            }
+          ],
+          [
+            {
+              "sheet": "town_B",
+              "frame": 122
+            },
+            {
+              "sheet": "town_B",
+              "frame": 111
+            },
+            {
+              "sheet": "town_B",
+              "frame": 121
+            }
+          ],
+          [
+            {
+              "sheet": "town_B",
+              "frame": 122
+            },
+            {
+              "sheet": "town_B",
+              "frame": 52
+            },
+            {
+              "sheet": "town_B",
+              "frame": 121
+            }
+          ]
+        ],
+        "detail": [
+          [
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "sheet": "town_B",
+              "frame": 332
+            },
+            null,
+            {
+              "sheet": "town_B",
+              "frame": 333
+            }
+          ],
+          [
+            null,
+            {
+              "sheet": "doors_outside",
+              "frame": 18
+            },
+            {
+              "sheet": "grass_B",
+              "frame": 180
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "hovel-2",
+      "name": "hovel-2",
+      "width": 2,
+      "height": 2,
+      "layers": {
+        "base": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ],
+        "main": [
+          [
+            {
+              "sheet": "town_B",
+              "frame": 44
+            },
+            {
+              "sheet": "town_B",
+              "frame": 46
+            }
+          ],
+          [
+            {
+              "sheet": "town_B",
+              "frame": 143
+            },
+            {
+              "sheet": "town_B",
+              "frame": 159
+            }
+          ]
+        ],
+        "detail": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            {
+              "sheet": "doors_outside",
+              "frame": 3
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "shack",
+      "name": "shack",
+      "width": 2,
+      "height": 2,
+      "layers": {
+        "base": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ],
+        "main": [
+          [
+            {
+              "sheet": "grass_B",
+              "frame": 217
+            },
+            {
+              "sheet": "grass_B",
+              "frame": 218
+            }
+          ],
+          [
+            {
+              "sheet": "grass_B",
+              "frame": 217
+            },
+            {
+              "sheet": "grass_B",
+              "frame": 218
+            }
+          ]
+        ],
+        "detail": [
+          [
+            null,
+            null
+          ],
+          [
+            {
+              "sheet": "doors_inside",
+              "frame": 0
+            },
+            {
+              "sheet": "grass_B",
+              "frame": 208
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": "camp",
+      "name": "camp",
+      "width": 2,
+      "height": 1,
+      "layers": {
+        "base": [
+          [
+            null,
+            null
+          ]
+        ],
+        "main": [
+          [
+            {
+              "sheet": "grass_B",
+              "frame": 134
+            },
+            {
+              "sheet": "grass_B",
+              "frame": 135
+            }
+          ]
+        ],
+        "detail": [
           [
             null,
             null

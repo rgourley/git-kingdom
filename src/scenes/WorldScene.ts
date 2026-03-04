@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { LanguageKingdom, TILES } from '../types';
 import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePacks, GRASS_B_COLS, GRASS_B_FRAMES, GRASS_FLOWERS_COLS, GRASS_FLOWER_FRAMES, TREE_DEFS, GRASS_TREES_COLS, DESERT_B_COLS, DESERT_B_DECO, CAVE_B_COLS, CAVE_B_DECO, createBuildingTextures, getBuildingTextureKey } from '../generators/TilesetGenerator';
 import { generateWorld, WorldData, WorldKingdom, WorldSettlement } from '../generators/WorldGenerator';
+import { trackCityEntered, trackWorldSearch, trackPageView } from '../analytics';
 
 // Stepped zoom levels for crisp pixel-art rendering (retro style)
 const WORLD_ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
@@ -806,6 +807,14 @@ export class WorldScene extends Phaser.Scene {
     this.hideInfoPanel();
     document.getElementById('legend')!.style.display = 'none';
 
+    // Analytics
+    trackCityEntered({
+      language: kingdom.language,
+      repo_count: kingdom.repos.length,
+      total_stars: kingdom.totalStars,
+    });
+    trackPageView(`/city/${kingdom.language.toLowerCase()}`, `Git Kingdom | ${kingdom.language}`);
+
     // Transition to CityScene
     this.scene.start('CityScene', {
       kingdom,
@@ -929,6 +938,7 @@ export class WorldScene extends Phaser.Scene {
         );
 
         if (matchKingdom) {
+          trackWorldSearch({ query, found: true });
           // Find the world kingdom for this language and pan to it
           const wk = this.allKingdoms.find(k => k.language === matchKingdom.language);
           if (wk) {
@@ -941,6 +951,7 @@ export class WorldScene extends Phaser.Scene {
             window.history.pushState({}, '', `/${query}`);
           }
         } else {
+          trackWorldSearch({ query, found: false });
           // User not found in world — show a brief flash on the search input
           searchInput.style.borderColor = '#ff4444';
           searchInput.placeholder = 'Not found in world';

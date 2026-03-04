@@ -7,6 +7,10 @@ import { SpritePacks } from './generators/TilesetGenerator';
 import { generateTestRepos } from './testdata';
 import { parseRoute } from './router';
 import { fetchUniversalWorld, fetchCurrentUser, joinWorld, invalidateWorldCache } from './api/client';
+import {
+  trackPageView, trackGameStart, trackWorldJoined,
+  trackGitHubLinkClicked, trackSignInInitiated,
+} from './analytics';
 
 function getBiome(lang: string): Biome {
   const m: Record<string, Biome> = {
@@ -18,14 +22,51 @@ function getBiome(lang: string): Biome {
   return m[lang] || 'grassland';
 }
 
+/**
+ * Filter out non-code "content repos" — awesome-lists, roadmaps, interview prep,
+ * cheatsheets, etc.  GitHub often tags these with a language (TypeScript, JavaScript)
+ * even though they're curated markdown/docs, not real software.
+ * Keeping them distorts kingdom rankings (e.g. developer-roadmap was TypeScript's #1).
+ */
+function isContentRepo(m: KingdomMetrics): boolean {
+  const name = (m.repo.name || '').toLowerCase();
+
+  const contentNamePatterns = [
+    /^awesome[-_]/, /[-_]awesome$/,                       // awesome-lists
+    /[-_]roadmap$/, /^roadmap[-_]/,                       // roadmaps
+    /[-_]interview[s]?$/, /^interview[-_]/,               // interview prep
+    /[-_]cheatsheet/, /^cheatsheet/,                      // cheatsheets
+    /^clean[-_]code/,                                     // clean-code books
+    /^build[-_]your[-_]own/,                              // tutorial collections
+    /^(the[-_])?book[-_]of[-_]/,                          // book repos
+    /^(the[-_])?art[-_]of[-_]/,                           // art-of-X repos
+    /^(system[-_])?design[-_](primer|interview)$/,        // system design
+    /^coding[-_](interview|challenge)/,                   // interview prep
+    /[-_]best[-_]?practices$/,                            // best practices lists
+    /^papers[-_]we[-_]love$/,                             // paper collections
+    /^free[-_].*[-_](books|courses|resources)/,           // free resource lists
+    /^beginners[-_].*[-_]tutorial$/,                      // beginner tutorials (content-only)
+  ];
+
+  return contentNamePatterns.some(p => p.test(name));
+}
+
 function groupByLanguage(allMetrics: KingdomMetrics[]): LanguageKingdom[] {
   const groups = new Map<string, KingdomMetrics[]>();
 
+  let filtered = 0;
   for (const m of allMetrics) {
     const lang = m.repo.language;
     if (!lang) continue;
+    if (isContentRepo(m)) {
+      filtered++;
+      continue;
+    }
     if (!groups.has(lang)) groups.set(lang, []);
     groups.get(lang)!.push(m);
+  }
+  if (filtered > 0) {
+    console.log(`Filtered ${filtered} content repos (awesome-lists, roadmaps, etc.)`);
   }
 
   // Filter out tiny language groups (< 3 repos) — they clutter the world map
@@ -234,6 +275,7 @@ async function boot() {
           if (result) {
             console.log(`[OAuth] Joined! Added ${result.addedRepos} repos.`);
             invalidateWorldCache(); // next fetch gets fresh data
+            trackWorldJoined({ added_repos: result.addedRepos });
           }
         }).catch(() => {});
       }
@@ -261,6 +303,8 @@ async function boot() {
   // Show the title overlay on top of the animated city
   const titleScreen = showTitleScreen();
   await titleScreen.waitForClick();
+  trackGameStart();
+  trackPageView('/', 'Git Kingdom | World Map');
 
   // User clicked — stop TitleScene, load real data, start WorldScene
   loadingEl.style.display = 'block';
@@ -354,6 +398,7 @@ async function bootDirect(
     highlightUser,
   });
   game.scene.add('CityScene', CityScene, false);
+  trackPageView(`/${highlightUser || ''}`, `Git Kingdom | ${highlightUser || 'World Map'}`);
 
   (window as any).__gitworld = {
     kingdoms: languageKingdoms,
@@ -382,9 +427,39 @@ async function bootDirect(
         },
       });
       console.log(`[Deep link] Jumping to ${targetKingdom.language} city for ${fullName}`);
+      trackPageView(`/city/${targetKingdom.language.toLowerCase()}/${fullName}`, `Git Kingdom | ${targetKingdom.language}`);
     }
   }
 }
+
+// ─── Analytics: event delegation for GitHub links & sign-in ──
+document.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+
+  // Track GitHub link clicks (.gh-link or any link to github.com)
+  const ghLink = target.closest('a[href*="github.com"]') as HTMLAnchorElement | null;
+  if (ghLink) {
+    const href = ghLink.href;
+    const ghPath = href.replace(/^https?:\/\/github\.com\//, '');
+    const parts = ghPath.split('/').filter(Boolean);
+    const linkType: 'user' | 'repo' = parts.length >= 2 ? 'repo' : 'user';
+    const linkTarget = parts.slice(0, 2).join('/') || parts[0] || '';
+
+    let context = 'unknown';
+    if (ghLink.closest('#info-panel')) context = 'info_panel';
+    else if (ghLink.closest('#legend')) context = 'legend';
+    else if (ghLink.closest('#game-header')) context = 'header';
+    else if (ghLink.closest('#entry-modal')) context = 'title_screen';
+
+    trackGitHubLinkClicked({ link_type: linkType, target: linkTarget, context });
+  }
+
+  // Track sign-in link clicks
+  const authLink = target.closest('a[href*="/api/auth/login"]') as HTMLAnchorElement | null;
+  if (authLink) {
+    trackSignInInitiated();
+  }
+});
 
 boot().catch((err) => {
   console.error('Boot failed:', err);

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /editor.html
+
+Sitemap: https://gitkingdom.dev/sitemap.xml

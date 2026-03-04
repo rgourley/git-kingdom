@@ -880,20 +880,22 @@ export function createBuildingTexturesWithTemplates(
  * Expands each template into all visual variations: color swaps × mirrors × deco swaps.
  * Returns the rendered canvases + a rank→textureKey[] mapping for the game to pick from.
  */
+export interface VariantEntry { key: string; w: number; h: number }
+
 export function createTemplateVariantTextures(
   spritePacks: SpritePacks,
   templates: BuildingTemplate[],
-): { textures: Map<string, HTMLCanvasElement>; variantsByRank: Map<string, string[]> } {
+): { textures: Map<string, HTMLCanvasElement>; variantsByRank: Map<string, VariantEntry[]> } {
   const variants = expandTemplateVariations(templates);
   const textures = new Map<string, HTMLCanvasElement>();
-  const variantsByRank = new Map<string, string[]>();
+  const variantsByRank = new Map<string, VariantEntry[]>();
 
   for (const v of variants) {
     const canvas = renderTemplateToCanvas(v.template, spritePacks);
     textures.set(v.textureKey, canvas);
 
     if (!variantsByRank.has(v.rank)) variantsByRank.set(v.rank, []);
-    variantsByRank.get(v.rank)!.push(v.textureKey);
+    variantsByRank.get(v.rank)!.push({ key: v.textureKey, w: v.width, h: v.height });
   }
 
   return { textures, variantsByRank };
@@ -901,18 +903,40 @@ export function createTemplateVariantTextures(
 
 /**
  * Pick a building texture key — editor templates take priority.
- * Only falls back to legacy procedural textures when no editor
- * templates exist for the building's rank.
+ * When buildingW/H are provided, prefers templates matching the exact
+ * footprint size (so a 20×20 building gets a 20×20 template, not a 14×14).
+ * Falls back to any template of the same rank, then to legacy textures.
  */
 export function pickBuildingTextureKey(
   rank: string,
   seed: number,
-  variantsByRank?: Map<string, string[]>,
+  variantsByRank?: Map<string, VariantEntry[]>,
+  buildingW?: number,
+  buildingH?: number,
 ): string {
-  // Prefer editor-created templates when available
-  const tmplKeys = variantsByRank?.get(rank) || [];
-  if (tmplKeys.length > 0) {
-    return tmplKeys[Math.abs(seed) % tmplKeys.length];
+  const variants = variantsByRank?.get(rank) || [];
+  if (variants.length > 0) {
+    // If building dimensions provided, prefer exact-size matches first
+    if (buildingW && buildingH) {
+      const sizeMatched = variants.filter(v => v.w === buildingW && v.h === buildingH);
+      if (sizeMatched.length > 0) {
+        return sizeMatched[Math.abs(seed) % sizeMatched.length].key;
+      }
+      // Fall back to closest size within same rank
+      const sorted = [...variants].sort((a, b) => {
+        const da = Math.abs(a.w - buildingW) + Math.abs(a.h - buildingH);
+        const db = Math.abs(b.w - buildingW) + Math.abs(b.h - buildingH);
+        return da - db;
+      });
+      // Pick from the closest-size group
+      const bestDist = Math.abs(sorted[0].w - buildingW) + Math.abs(sorted[0].h - buildingH);
+      const closest = sorted.filter(v =>
+        Math.abs(v.w - buildingW) + Math.abs(v.h - buildingH) === bestDist
+      );
+      return closest[Math.abs(seed) % closest.length].key;
+    }
+    // No dimensions — pick any variant of this rank
+    return variants[Math.abs(seed) % variants.length].key;
   }
   // Fallback: legacy procedural textures for ranks with no templates
   const legacyStyles = BUILDING_STYLES[rank] || BUILDING_STYLES.cottage;

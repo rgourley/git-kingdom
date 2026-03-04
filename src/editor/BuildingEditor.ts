@@ -73,6 +73,8 @@ class BuildingEditor {
 
   // Library
   private library: BuildingTemplate[] = [];
+  // Tracks the ID of the template currently being edited (for overwrite on save)
+  private editingTemplateId: string | null = null;
 
   // DOM refs
   private paletteCanvas!: HTMLCanvasElement;
@@ -218,6 +220,7 @@ class BuildingEditor {
 
   private clearAllLayers() {
     this.pushUndo();
+    this.editingTemplateId = null; // Starting fresh — no longer editing an existing template
     this.layers = emptyLayers(this.gridW, this.gridH);
     this.renderAll();
   }
@@ -809,7 +812,10 @@ class BuildingEditor {
 
   private buildTemplate(): BuildingTemplate {
     const name = (document.getElementById('tmpl-name') as HTMLInputElement).value || 'building';
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const slugId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    // When editing an existing template, keep its original ID so save overwrites it.
+    // Only use the slug-based ID for brand-new templates.
+    const id = this.editingTemplateId || slugId;
     const isPublic = (document.getElementById('tmpl-public') as HTMLInputElement)?.checked || false;
     const tags: string[] = [];
     if (isPublic) tags.push('public');
@@ -840,6 +846,7 @@ class BuildingEditor {
   private async saveTemplate() {
     const tmpl = this.buildTemplate();
     this.addToLibrary(tmpl);
+    this.editingTemplateId = tmpl.id; // Now tracking this template for future saves
     await this.persistLibrary();
     const rank = footprintToRank(tmpl.width, tmpl.height);
     this.status(`Saved: ${tmpl.name} (${tmpl.width}×${tmpl.height}) → ${rank} rank`);
@@ -850,9 +857,12 @@ class BuildingEditor {
     const newName = prompt('Save as new template name:', currentName + '-copy');
     if (!newName || newName.trim() === '') return;
 
+    // Clear editing ID so this creates a brand-new template
+    this.editingTemplateId = null;
     (document.getElementById('tmpl-name') as HTMLInputElement).value = newName.trim();
     const tmpl = this.buildTemplate();
     this.addToLibrary(tmpl);
+    this.editingTemplateId = tmpl.id; // Now editing the new copy
     await this.persistLibrary();
     const rank = footprintToRank(tmpl.width, tmpl.height);
     this.status(`Saved new: ${tmpl.name} (${tmpl.width}×${tmpl.height}) → ${rank} rank`);
@@ -908,7 +918,12 @@ class BuildingEditor {
   // ─── Library Management ───────────────────────────────────────
 
   private addToLibrary(tmpl: BuildingTemplate) {
-    const existing = this.library.findIndex(t => t.id === tmpl.id);
+    // Match by ID first; fall back to matching by name to handle legacy
+    // templates whose IDs don't match their slugified name
+    let existing = this.library.findIndex(t => t.id === tmpl.id);
+    if (existing < 0) {
+      existing = this.library.findIndex(t => t.name === tmpl.name);
+    }
     if (existing >= 0) {
       this.library[existing] = tmpl;
     } else {
@@ -960,6 +975,7 @@ class BuildingEditor {
     const tmpl = this.library.find(t => t.id === id);
     if (tmpl) {
       this.pushUndo();
+      this.editingTemplateId = tmpl.id; // Track original ID for overwrite on save
       this.applyTemplate(tmpl);
       this.status(`Loaded from library: ${tmpl.name}`);
     }
