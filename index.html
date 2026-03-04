@@ -870,6 +870,55 @@
       return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    function renderProfileRepos(repos, subtitleEl, reposEl) {
+      subtitleEl.textContent = repos.length + ' repo' + (repos.length !== 1 ? 's' : '') + ' in the kingdom';
+
+      // Group repos by language
+      var byLang = {};
+      repos.forEach(function(r) {
+        var lang = r.language || 'Other';
+        if (!byLang[lang]) byLang[lang] = [];
+        byLang[lang].push(r);
+      });
+
+      var html = '';
+      var langs = Object.keys(byLang).sort(function(a, b) {
+        var starsA = byLang[a].reduce(function(s, r) { return s + r.stargazers; }, 0);
+        var starsB = byLang[b].reduce(function(s, r) { return s + r.stargazers; }, 0);
+        return starsB - starsA;
+      });
+
+      langs.forEach(function(lang) {
+        var langRepos = byLang[lang];
+        html += '<div class="profile-section-header">' +
+          escHtml(lang) + ' Kingdom (' + langRepos.length + ')</div>';
+
+        langRepos.forEach(function(r) {
+          var stars = r.stargazers >= 1000
+            ? Math.round(r.stargazers / 1000) + 'k'
+            : r.stargazers;
+          html += '<div class="profile-repo-item" data-repo="' + escHtml(r.full_name) + '">' +
+            '<span class="profile-repo-name">' + escHtml(r.name) + '</span>' +
+            '<span class="profile-repo-meta">' +
+              '<span class="profile-repo-stars">' + stars + ' ★</span>' +
+            '</span>' +
+          '</div>';
+        });
+      });
+
+      reposEl.innerHTML = html;
+
+      // Wire up click handlers — navigate to repo in the kingdom
+      reposEl.querySelectorAll('.profile-repo-item').forEach(function(el) {
+        el.addEventListener('click', function() {
+          var fullName = el.getAttribute('data-repo');
+          if (fullName) {
+            window.location.href = '/' + fullName;
+          }
+        });
+      });
+    }
+
     window.__showProfilePanel = function() {
       var user = window.__gkUser;
       if (!user) return;
@@ -899,65 +948,36 @@
         window.gtag('event', 'profile_panel_opened');
       }
 
-      // Fetch repos from API
+      // Fetch repos from API (auto-join if none found)
       fetch('/api/user/repos', { credentials: 'include' })
         .then(function(res) { return res.ok ? res.json() : null; })
         .then(function(data) {
           if (!data || !data.repos || data.repos.length === 0) {
-            subtitleEl.textContent = 'No repos claimed yet';
-            reposEl.innerHTML = '<div style="font-size:9px;color:#8a8070;margin-top:8px">' +
-              'Your repos appear here after claiming. ' +
-              'Visit <a href="/' + escHtml(user.login) + '" class="gh-link">/' + escHtml(user.login) + '</a> to add your repos to the kingdom!</div>';
+            subtitleEl.textContent = 'Claiming your repos...';
+            reposEl.innerHTML = '';
+            // Auto-join: add all public repos to the world, then re-fetch
+            fetch('/api/world/join', { method: 'POST', credentials: 'include' })
+              .then(function(r) { return r.ok ? r.json() : null; })
+              .then(function() {
+                return fetch('/api/user/repos', { credentials: 'include' });
+              })
+              .then(function(r2) { return r2.ok ? r2.json() : null; })
+              .then(function(d2) {
+                if (d2 && d2.repos && d2.repos.length > 0) {
+                  renderProfileRepos(d2.repos, subtitleEl, reposEl);
+                } else {
+                  subtitleEl.textContent = 'No public repos found';
+                  reposEl.innerHTML = '<div style="font-size:9px;color:#8a8070;margin-top:8px">' +
+                    'Public repos will appear here as buildings in the kingdom.</div>';
+                }
+              })
+              .catch(function() {
+                subtitleEl.textContent = 'Failed to claim repos';
+              });
             return;
           }
 
-          var repos = data.repos;
-          subtitleEl.textContent = repos.length + ' repo' + (repos.length !== 1 ? 's' : '') + ' in the kingdom';
-
-          // Group repos by language
-          var byLang = {};
-          repos.forEach(function(r) {
-            var lang = r.language || 'Other';
-            if (!byLang[lang]) byLang[lang] = [];
-            byLang[lang].push(r);
-          });
-
-          var html = '';
-          var langs = Object.keys(byLang).sort(function(a, b) {
-            var starsA = byLang[a].reduce(function(s, r) { return s + r.stargazers; }, 0);
-            var starsB = byLang[b].reduce(function(s, r) { return s + r.stargazers; }, 0);
-            return starsB - starsA;
-          });
-
-          langs.forEach(function(lang) {
-            var langRepos = byLang[lang];
-            html += '<div class="profile-section-header">' +
-              escHtml(lang) + ' Kingdom (' + langRepos.length + ')</div>';
-
-            langRepos.forEach(function(r) {
-              var stars = r.stargazers >= 1000
-                ? Math.round(r.stargazers / 1000) + 'k'
-                : r.stargazers;
-              html += '<div class="profile-repo-item" data-repo="' + escHtml(r.full_name) + '">' +
-                '<span class="profile-repo-name">' + escHtml(r.name) + '</span>' +
-                '<span class="profile-repo-meta">' +
-                  '<span class="profile-repo-stars">' + stars + ' ★</span>' +
-                '</span>' +
-              '</div>';
-            });
-          });
-
-          reposEl.innerHTML = html;
-
-          // Wire up click handlers — navigate to repo in the kingdom
-          reposEl.querySelectorAll('.profile-repo-item').forEach(function(el) {
-            el.addEventListener('click', function() {
-              var fullName = el.getAttribute('data-repo');
-              if (fullName) {
-                window.location.href = '/' + fullName;
-              }
-            });
-          });
+          renderProfileRepos(data.repos, subtitleEl, reposEl);
         })
         .catch(function() {
           subtitleEl.textContent = 'Failed to load repos';
