@@ -45,13 +45,59 @@ export async function signOut() {
 }
 
 /**
- * Fetch the universal world data from our API.
- * Memoized — only fetches once per page load (cache cleared on join).
- * Returns null if the API is not available (e.g. running locally without Vercel).
+ * Fetch the universal world data.
+ * Strategy: load pre-baked JSON first, then fetch only new repos from Supabase.
+ * This avoids loading the full repo list from Supabase on every page load.
  */
 let worldCache: WorldData | null | undefined;
 export async function fetchUniversalWorld(): Promise<WorldData | null> {
   if (worldCache !== undefined) return worldCache;
+  try {
+    // 1. Load pre-baked JSON (fast, static, cached by browser)
+    const jsonRes = await fetch('/data/default-world.json');
+    if (!jsonRes.ok) {
+      // No JSON available — fall back to full Supabase fetch
+      return fetchFullWorld();
+    }
+    const base = (await jsonRes.json()) as WorldData;
+    if (!base.repos || base.repos.length === 0) {
+      return fetchFullWorld();
+    }
+
+    // 2. Fetch delta: only repos added/updated since the JSON was exported
+    const since = base.updatedAt;
+    if (since) {
+      try {
+        const deltaRes = await fetch(`/api/world?since=${encodeURIComponent(since)}`);
+        if (deltaRes.ok) {
+          const delta = (await deltaRes.json()) as WorldData;
+          if (delta.repos && delta.repos.length > 0) {
+            // Merge: delta repos override base repos by full_name
+            const baseMap = new Map(base.repos.map(r => [r.repo.full_name.toLowerCase(), r]));
+            for (const r of delta.repos) {
+              baseMap.set(r.repo.full_name.toLowerCase(), r);
+            }
+            base.repos = Array.from(baseMap.values());
+            console.log(`[world] Merged ${delta.repos.length} new/updated repos into ${base.repos.length} total`);
+          }
+          // Use fresh user list from delta
+          if (delta.users) base.users = delta.users;
+        }
+      } catch {
+        // Delta fetch failed — base data is still good
+      }
+    }
+
+    worldCache = base;
+    return base;
+  } catch {
+    // JSON fetch failed — try full Supabase fetch
+    return fetchFullWorld();
+  }
+}
+
+/** Full Supabase fetch (fallback when JSON isn't available) */
+async function fetchFullWorld(): Promise<WorldData | null> {
   try {
     const res = await fetch('/api/world');
     if (!res.ok) { worldCache = null; return null; }
