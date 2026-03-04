@@ -26,6 +26,7 @@ async function exportWorld() {
   const { data: repos, error } = await supabase
     .from('repos')
     .select('*, contributors(*)')
+    .gte('stargazers', 1)  // Only repos with at least 1 star
     .order('stargazers', { ascending: false });
 
   if (error) {

@@ -55,6 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let query = supabase
       .from('repos')
       .select('*, contributors(*)')
+      .gte('stargazers', 1)  // Only repos with at least 1 star
       .order('stargazers', { ascending: false });
 
     // Delta mode: only repos added/updated after the given timestamp
