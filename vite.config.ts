@@ -53,6 +53,11 @@ function templateSavePlugin(): Plugin {
 export default defineConfig({
   base: '/',
   plugins: [templateSavePlugin()],
+  server: {
+    watch: {
+      ignored: ['**/api/**'],
+    },
+  },
   build: {
     target: 'esnext',
     rollupOptions: {
