@@ -40,7 +40,7 @@ const MIN_STARS = 0;
 //   500+       3×5 / 3×3        cottage     Growing project
 //   100+       3×3              cottage     Small project
 //   21+        2×2              hovel       Tiny project
-//   0–20       1×1              camp        Zero-star repo
+//   0–20       2×2              hovel       Small repo
 // Non-castle buildings: max out at 18×18.  Only the #1 castle reaches 20×20.
 const FOOTPRINT_PRESETS: { minStars: number; shapes: { w: number; h: number }[] }[] = [
   { minStars: 150000, shapes: [{ w: 18, h: 18 }] },                    // citadel (max for non-castle)
@@ -56,7 +56,7 @@ const FOOTPRINT_PRESETS: { minStars: number; shapes: { w: number; h: number }[] 
   { minStars: 500,    shapes: [{ w: 3,  h: 5  }, { w: 3,  h: 3  }] }, // cottage
   { minStars: 100,    shapes: [{ w: 3,  h: 3  }] },                    // cottage
   { minStars: 21,     shapes: [{ w: 2,  h: 2  }] },                    // hovel
-  { minStars: 0,      shapes: [{ w: 1,  h: 1  }] },                    // camp
+  { minStars: 0,      shapes: [{ w: 2,  h: 2  }] },                    // hovel (was 1×1 camp)
 ];
 
 function getBuildingFootprint(stars: number, isTopRepo: boolean, seed: number): { w: number; h: number } {
