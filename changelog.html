@@ -159,11 +159,21 @@
       padding: 10px 24px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 20px;
+      justify-content: space-between;
       z-index: 100;
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
+    }
+    .floating-bar .bar-copy {
+      font-size: 10px;
+      color: #a89060;
+      white-space: nowrap;
+    }
+    .floating-bar .bar-copy a { font-size: inherit; color: #c0a870; }
+    .floating-bar .bar-links {
+      display: flex;
+      align-items: center;
+      gap: 20px;
     }
     .floating-bar a {
       font-family: 'Silkscreen', monospace;
@@ -190,8 +200,10 @@
       h1 { font-size: 22px; }
       .content { padding: 32px 16px 60px; }
       .version-header { flex-wrap: wrap; }
-      .floating-bar { gap: 10px; padding: 8px 12px; }
+      .floating-bar .bar-copy { font-size: 8px; }
+      .floating-bar .bar-links { gap: 10px; }
       .floating-bar a { font-size: 8px; }
+      .floating-bar { padding: 8px 12px; }
     }
   </style>
 </head>
@@ -260,17 +272,16 @@
     <a href="/" class="cta">Enter the Kingdom</a>
   </main>
 
-  <footer class="page-footer">
-    <p>Created by <a href="https://github.com/rgourley" style="color:#a89060">Rob Gourley</a></p>
-  </footer>
-
   <div class="floating-bar">
-    <a href="/about">About</a>
-    <a href="/how-it-works">How It Works</a>
-    <a href="/faq">FAQ</a>
-    <a href="/privacy">Privacy</a>
-    <a href="/changelog" class="active">Changelog</a>
-    <a href="/" class="bar-cta">Enter the Kingdom</a>
+    <span class="bar-copy">&copy; 2026 ClawStreet. Created by <a href="https://www.robertcreative.com/" target="_blank" rel="noopener">Rob Gourley</a></span>
+    <div class="bar-links">
+      <a href="/about">About</a>
+      <a href="/how-it-works">How It Works</a>
+      <a href="/faq">FAQ</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/changelog" class="active">Changelog</a>
+      <a href="/" class="bar-cta">Enter the Kingdom</a>
+    </div>
   </div>
 </body>
 </html>
