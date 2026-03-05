@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Server GitHub token not configured' });
     }
 
-    // Fetch user's repos from GitHub (1 API call, no per-repo fetches)
+    // Fetch user's repos from GitHub (with contributor data)
     const metrics = await fetchUserReposAsMetrics(login, githubToken, 100, 1);
     console.log(`[join] ${login}: found ${metrics.length} repos`);
 
@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         open_issues: m.repo.open_issues_count,
         size_kb: m.repo.size || 0,
         created_at: m.repo.created_at,
-        pushed_at: m.repo.updated_at,
+        pushed_at: m.repo.pushed_at || m.repo.updated_at,
         topics: m.repo.topics || [],
         total_commits: m.totalCommits,
         merged_prs: Math.floor(m.totalCommits * 0.3),
@@ -69,6 +69,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (repoErr || !repo) {
         console.warn(`[join] Failed to upsert ${m.repo.full_name}:`, repoErr?.message);
         continue;
+      }
+
+      // Upsert contributors for this repo
+      if (m.contributors.length > 0) {
+        const { error: contribErr } = await service.from('contributors').upsert(
+          m.contributors.slice(0, 20).map((c) => ({
+            repo_id: repo.id,
+            login: c.login,
+            avatar_url: c.avatar_url,
+            contributions: c.contributions || 0,
+          })),
+          { onConflict: 'repo_id,login' }
+        );
+        if (contribErr) {
+          console.warn(`[join] Contributors upsert failed for ${m.repo.full_name}:`, contribErr.message);
+        }
       }
 
       // Link user to repo

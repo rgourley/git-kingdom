@@ -1208,8 +1208,10 @@ export class CityScene extends Phaser.Scene {
     }
     if (roadTiles.length === 0) return;
 
-    // Select top citizens (max 20)
-    const maxCitizens = Math.min(20, this.city.citizens.length, roadTiles.length);
+    // Scale citizen count with city size (more buildings = more citizens)
+    const buildingCount = this.city.buildings.length;
+    const citizenCap = buildingCount < 10 ? 10 : buildingCount < 50 ? 20 : 30;
+    const maxCitizens = Math.min(citizenCap, this.city.citizens.length, roadTiles.length);
     const citizensToSpawn = this.city.citizens.slice(0, maxCitizens);
     const rand = seededRandom(54321);
 

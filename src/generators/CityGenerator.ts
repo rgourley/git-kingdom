@@ -108,14 +108,32 @@ function biomeBaseTile(biome: Biome): number {
 }
 
 // ─── Aggregate citizens from all repos in this language ─────
+// Priority: contributors from recently-pushed repos (last 7 days) first,
+// then backfill with all-time top contributors to keep cities alive.
+const RECENT_DAYS = 7;
+
 function aggregateCitizens(repos: KingdomMetrics[], language: string): CitizenData[] {
-  const userMap = new Map<string, CitizenData>();
+  const now = Date.now();
+  const recentCutoff = now - RECENT_DAYS * 24 * 60 * 60 * 1000;
+
+  // Track which repos are "recently active"
+  const recentRepos = new Set<string>();
+  for (const r of repos) {
+    if (r.repo.pushed_at && new Date(r.repo.pushed_at).getTime() > recentCutoff) {
+      recentRepos.add(r.repo.full_name);
+    }
+  }
+
+  // Build citizen map (all contributors across all repos)
+  const userMap = new Map<string, CitizenData & { isRecent: boolean }>();
 
   for (const r of repos) {
+    const isRecentRepo = recentRepos.has(r.repo.full_name);
     for (const c of r.contributors) {
       const existing = userMap.get(c.login);
       if (existing) {
         existing.totalContributions += c.contributions;
+        if (isRecentRepo) existing.isRecent = true;
         if (!existing.repos.includes(r.repo.full_name)) {
           existing.repos.push(r.repo.full_name);
         }
@@ -126,13 +144,28 @@ function aggregateCitizens(repos: KingdomMetrics[], language: string): CitizenDa
           totalContributions: c.contributions,
           repos: [r.repo.full_name],
           cities: [language],
+          isRecent: isRecentRepo,
         });
       }
     }
   }
 
-  // Sort by contributions descending
-  return [...userMap.values()].sort((a, b) => b.totalContributions - a.totalContributions);
+  const all = [...userMap.values()];
+
+  // Recent contributors first (sorted by contributions), then all-time (sorted by contributions)
+  const recent = all.filter(c => c.isRecent).sort((a, b) => b.totalContributions - a.totalContributions);
+  const allTime = all.filter(c => !c.isRecent).sort((a, b) => b.totalContributions - a.totalContributions);
+
+  // Merge: recent first, then backfill — deduped
+  const seen = new Set<string>();
+  const merged: CitizenData[] = [];
+  for (const c of [...recent, ...allTime]) {
+    if (seen.has(c.login)) continue;
+    seen.add(c.login);
+    merged.push(c);
+  }
+
+  return merged;
 }
 
 // ═════════════════════════════════════════════════════════════

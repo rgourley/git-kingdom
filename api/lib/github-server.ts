@@ -13,6 +13,7 @@ interface RepoData {
   language: string | null;
   created_at: string;
   updated_at: string;
+  pushed_at: string;
   owner: { login: string; avatar_url: string };
   topics?: string[];
   size: number;
@@ -85,9 +86,9 @@ export async function fetchUserReposServer(
 }
 
 /**
- * Fetch a user's repos and return KingdomMetrics directly from the listing.
- * Uses only 1 API call (the repos listing), not per-repo fetches.
- * Contributors are left empty — they can be fetched lazily when entering a city.
+ * Fetch a user's repos and return KingdomMetrics with full contributor data.
+ * Step 1: list repos (1 API call)
+ * Step 2: fetch contributors for each repo in parallel (N API calls)
  */
 export async function fetchUserReposAsMetrics(
   username: string,
@@ -96,7 +97,7 @@ export async function fetchUserReposAsMetrics(
   minStars = 0,
 ): Promise<KingdomMetrics[]> {
   validateUsername(username);
-  const metrics: KingdomMetrics[] = [];
+  const repoTuples: [string, string][] = [];
 
   for (const endpoint of [`/users/${username}/repos`, `/orgs/${username}/repos`]) {
     try {
@@ -109,33 +110,16 @@ export async function fetchUserReposAsMetrics(
       for (const repo of data) {
         if (repo.fork) continue;
         if (repo.stargazers_count < minStars) continue;
-        metrics.push({
-          repo: {
-            full_name: repo.full_name,
-            name: repo.name,
-            description: repo.description,
-            stargazers_count: repo.stargazers_count,
-            forks_count: repo.forks_count,
-            open_issues_count: repo.open_issues_count,
-            language: repo.language,
-            created_at: repo.created_at,
-            updated_at: repo.updated_at,
-            owner: { login: repo.owner.login, avatar_url: repo.owner.avatar_url },
-            topics: repo.topics || [],
-            size: repo.size || 0,
-          },
-          contributors: [],  // empty — fetched lazily when entering city
-          totalCommits: 0,
-          king: { login: repo.owner.login, contributions: 0, avatar_url: repo.owner.avatar_url },
-        });
+        repoTuples.push([repo.owner.login, repo.name]);
       }
-      if (metrics.length > 0) break;
+      if (repoTuples.length > 0) break;
     } catch {
       continue;
     }
   }
 
-  return metrics;
+  // Fetch full metrics (including contributors) for each repo
+  return fetchAllRepoMetrics(repoTuples, token, 5);
 }
 
 /**
@@ -180,6 +164,7 @@ export async function fetchRepoMetrics(
         language: repoData.language,
         created_at: repoData.created_at,
         updated_at: repoData.updated_at,
+        pushed_at: repoData.pushed_at || repoData.updated_at,
         owner: { login: repoData.owner.login, avatar_url: repoData.owner.avatar_url },
         topics: repoData.topics || [],
         size: repoData.size,
