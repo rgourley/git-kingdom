@@ -30,6 +30,20 @@ function stepCityZoom(direction: number): number {
   return CITY_ZOOM_LEVELS[cityZoomIndex];
 }
 
+/**
+ * Compute a freshness score (0.3..1.0) from a repo's pushed_at date.
+ * Repos pushed within the last month → 1.0 (fully opaque)
+ * Repos pushed 2+ years ago → 0.3 (faded)
+ * Linear ramp in between.
+ */
+function repoFreshness(pushedAt: string | undefined): number {
+  if (!pushedAt) return 0.5;
+  const ageMs = Date.now() - new Date(pushedAt).getTime();
+  const ageMonths = ageMs / (1000 * 60 * 60 * 24 * 30);
+  // 0 months → 1.0, 24 months → 0.3
+  return Phaser.Math.Clamp(1.0 - (ageMonths / 24) * 0.7, 0.3, 1.0);
+}
+
 // Building rank colors for labels (8 tiers)
 const RANK_COLORS: Record<string, string> = {
   citadel: '#ffd700',
@@ -96,7 +110,7 @@ export class CityScene extends Phaser.Scene {
   private city!: CityInterior;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
-  private buildingLabels: { text: Phaser.GameObjects.Text; rank: string; buildingIndex: number }[] = [];
+  private buildingLabels: { text: Phaser.GameObjects.Text; rank: string; buildingIndex: number; freshness: number }[] = [];
   private lastZoom = -1;
   private highlightUser: string | null = null;
   // Store data for transitioning back
@@ -309,7 +323,7 @@ export class CityScene extends Phaser.Scene {
       titleLabel.setScale(1 / titleLabelScale);
       titleLabel.setOrigin(0.5, 0.5);
       titleLabel.setDepth(12);
-      this.buildingLabels.push({ text: titleLabel, rank: 'castle', buildingIndex: -1 });
+      this.buildingLabels.push({ text: titleLabel, rank: 'castle', buildingIndex: -1, freshness: 1.0 });
 
       // ── Building labels (compact, on-building, only for major buildings) ──
       for (let bi = 0; bi < buildings.length; bi++) {
@@ -334,7 +348,7 @@ export class CityScene extends Phaser.Scene {
             label.setScale(1 / labelScale);
             label.setOrigin(0.5, 1);
             label.setDepth(10);
-            this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: bi });
+            this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: bi, freshness: 1.0 });
           }
           continue;
         }
@@ -365,10 +379,12 @@ export class CityScene extends Phaser.Scene {
           backgroundColor: '#00000088',
           padding: { x: 3 * labelScale, y: 2 * labelScale },
         });
+        const fresh = repoFreshness(b.repoMetrics.repo.pushed_at);
         label.setScale(1 / labelScale);
         label.setOrigin(0.5, 1);
         label.setDepth(10);
-        this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: bi });
+        label.setAlpha(fresh);
+        this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: bi, freshness: fresh });
 
         // User's buildings: just the gold label (no circle ring)
       }
@@ -806,7 +822,7 @@ export class CityScene extends Phaser.Scene {
             label.setScale(1 / labelScale);
             label.setOrigin(0.5, 1);
             label.setDepth(10);
-            this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: globalIndex });
+            this.buildingLabels.push({ text: label, rank: b.rank, buildingIndex: globalIndex, freshness: 1.0 });
           }
         }
 
@@ -1092,7 +1108,8 @@ export class CityScene extends Phaser.Scene {
       const effectiveScale = Phaser.Math.Clamp(1 / zoom, 0.15, 2.0) / labelScale;
 
       // Simplified LOD: only major building labels exist now, minor are hover-only
-      for (const { text, rank, buildingIndex } of this.buildingLabels) {
+      // Alpha is capped by freshness (recently pushed repos = bright, stale = faded)
+      for (const { text, rank, buildingIndex, freshness } of this.buildingLabels) {
         text.setScale(effectiveScale);
         // Don't re-show a label that's hidden because we're hovering that building
         if (buildingIndex === this.hoveredBuildingIndex && buildingIndex >= 0) continue;
@@ -1102,13 +1119,13 @@ export class CityScene extends Phaser.Scene {
 
         if (zoom < 0.7) {
           text.setVisible(isMajor);
-          text.setAlpha(isMajor ? 1 : 0);
+          text.setAlpha(isMajor ? freshness : 0);
         } else if (zoom < 1.2) {
           text.setVisible(isMajor || isUpper);
-          text.setAlpha(isMajor ? 1 : Phaser.Math.Clamp((zoom - 0.7) / 0.5, 0, 1));
+          text.setAlpha(isMajor ? freshness : Phaser.Math.Clamp((zoom - 0.7) / 0.5, 0, freshness));
         } else {
           text.setVisible(true);
-          text.setAlpha(1);
+          text.setAlpha(freshness);
         }
       }
 
