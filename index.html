@@ -121,14 +121,12 @@
     }
     #info-panel .stat {
       display: flex;
-      align-items: baseline;
-      gap: 8px;
+      justify-content: space-between;
       margin: 4px 0;
     }
-    #info-panel .stat-label { opacity: 0.7; font-size: 10px; min-width: 80px; flex-shrink: 0; }
-    #info-panel .stat-value { font-weight: bold; font-size: 10px; text-align: right; flex: 1; }
-    #info-panel .stat-value-wrap { font-weight: bold; font-size: 10px; flex: 1; text-align: right; line-height: 1.4; }
-    #info-panel .king { margin-top: 8px; font-weight: bold; font-size: 10px; }
+    #info-panel .stat-label { opacity: 0.7; }
+    #info-panel .stat-value { font-weight: bold; }
+    #info-panel .king { margin-top: 8px; font-weight: bold; }
 
     /* Draggable panel hint — grab cursor on the top header area */
     #info-panel .info-header,
@@ -544,8 +542,7 @@
     .stat-bar-label {
       opacity: 0.7;
       font-size: 10px;
-      min-width: 80px;
-      flex-shrink: 0;
+      min-width: 60px;
     }
     .stat-bar-track {
       flex: 1;

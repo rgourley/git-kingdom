@@ -1463,7 +1463,7 @@ export class CityScene extends Phaser.Scene {
     const maxIssues = Math.max(...repoBuildings.map(bb => bb.repoMetrics!.repo.open_issues_count), 1);
 
     const stats = [];
-    if (repo.description) stats.push(`<div style="font-size:10px;opacity:0.85;margin:4px 0 2px;line-height:1.4">${esc(repo.description)}</div>`);
+    if (repo.description) stats.push(stat('', esc(repo.description)));
     stats.push('<hr class="golden">');
     stats.push(
       statBar('Stars', repo.stargazers_count, maxStars, 'orange'),

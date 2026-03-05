@@ -768,8 +768,8 @@ export class WorldScene extends Phaser.Scene {
       '<hr class="golden">',
       statBar('Stars', k.totalStars, maxStars, 'orange'),
       statBar('Commits', k.totalCommits, maxCommits, 'green'),
-      stat('Repos', repoCount.toLocaleString()),
-      `<div class="stat"><span class="stat-label">Top Repos</span><span class="stat-value-wrap">${topRepoLinks}</span></div>`,
+      stat('Repos', repoCount.toString()),
+      `<div class="stat"><span class="stat-label">Top Repos</span><span class="stat-value">${topRepoLinks}</span></div>`,
       `<button id="enter-city-btn" class="rpgui-button golden" style="width:100%;margin-top:8px">
         <p>🏰 Enter ${esc(k.language)}</p>
       </button>`,
