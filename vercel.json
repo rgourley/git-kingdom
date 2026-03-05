@@ -1,6 +1,12 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npx tsx scripts/export-world.ts && npm run build",
   "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/cron/refresh-pushed",
+      "schedule": "0 */6 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
