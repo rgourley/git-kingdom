@@ -19,6 +19,7 @@ const RESERVED_PATHS = new Set([
   'how-it-works',
   'faq',
   'admin',
+  'citizen',
 ]);
 
 export interface Route {

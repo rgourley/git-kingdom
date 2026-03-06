@@ -18,6 +18,7 @@
     { "source": "/how-it-works", "destination": "/how-it-works.html" },
     { "source": "/faq", "destination": "/faq.html" },
     { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/citizen/:username", "destination": "/citizen.html" },
     { "source": "/:path*", "destination": "/api/page" }
   ]
 }

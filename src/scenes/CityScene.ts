@@ -1400,7 +1400,8 @@ export class CityScene extends Phaser.Scene {
     ];
 
     document.getElementById('info-stats')!.innerHTML = stats.join('');
-    document.getElementById('info-king')!.innerHTML = '';
+    document.getElementById('info-king')!.innerHTML =
+      `<a href="/citizen/${encodeURIComponent(citizen.login)}" class="sheet-link">📜 View Character Sheet</a>`;
     if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
     panel.style.display = 'block';
   }
@@ -1541,7 +1542,8 @@ export class CityScene extends Phaser.Scene {
     ];
 
     document.getElementById('info-stats')!.innerHTML = stats.join('');
-    document.getElementById('info-king')!.innerHTML = '';
+    document.getElementById('info-king')!.innerHTML =
+      `<a href="/citizen/${encodeURIComponent(citizen.login)}" class="sheet-link">📜 View Character Sheet</a>`;
     if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
     panel.style.display = 'block';
   }

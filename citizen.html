@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Character Sheet | Git Kingdom</title>
+  <meta name="robots" content="index, follow" />
+  <link rel="icon" href="/favicon.ico" />
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #d4c8a0;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .page-header {
+      background: linear-gradient(180deg, #16213e 0%, #1a1a2e 100%);
+      border-bottom: 3px solid #8b6914;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .page-header a { text-decoration: none; }
+    .logo {
+      font-family: 'Silkscreen', monospace;
+      color: #ffd700;
+      font-size: 20px;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px rgba(255,215,0,0.3);
+    }
+    .logo span { background: #8b6914; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; letter-spacing: 1px; }
+    .back-link {
+      font-family: 'Silkscreen', monospace;
+      color: #a89060;
+      text-decoration: none;
+      font-size: 11px;
+      letter-spacing: 1px;
+    }
+    .back-link:hover { color: #ffd700; }
+
+    /* Sheet container */
+    .sheet-wrap {
+      max-width: 600px;
+      margin: 32px auto;
+      padding: 0 16px 80px;
+    }
+    .sheet {
+      background: linear-gradient(180deg, rgba(40,35,25,0.9) 0%, rgba(30,28,22,0.95) 100%);
+      border: 2px solid #5a4a20;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+
+    /* Header section */
+    .sheet-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(139,105,20,0.15) 0%, transparent 100%);
+      border-bottom: 1px solid #3a3020;
+    }
+    .sheet-avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 3px solid #8b6914;
+      box-shadow: 0 0 16px rgba(255,215,0,0.2);
+    }
+    .sheet-identity { flex: 1; min-width: 0; }
+    .sheet-login {
+      font-family: 'Silkscreen', monospace;
+      font-size: 18px;
+      color: #ffd700;
+      letter-spacing: 1px;
+    }
+    .sheet-title {
+      font-size: 13px;
+      color: #c0a870;
+      margin-top: 2px;
+    }
+    .sheet-level {
+      font-family: 'Silkscreen', monospace;
+      font-size: 11px;
+      color: #8a7a58;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+    .sheet-contribs {
+      font-size: 12px;
+      color: #8a7a58;
+      margin-top: 2px;
+    }
+
+    /* Sections */
+    .sheet-section {
+      padding: 16px 24px;
+      border-bottom: 1px solid #2a2418;
+    }
+    .sheet-section:last-child { border-bottom: none; }
+    .section-title {
+      font-family: 'Silkscreen', monospace;
+      font-size: 11px;
+      color: #8a7a58;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* Badges */
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(139,105,20,0.2);
+      border: 1px solid #4a3a18;
+      border-radius: 12px;
+      padding: 3px 10px 3px 6px;
+      font-size: 11px;
+      color: #d4c8a0;
+    }
+    .badge-icon { font-size: 13px; }
+
+    /* Stats */
+    .stat-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .stat-label {
+      font-family: 'Silkscreen', monospace;
+      font-size: 10px;
+      color: #a89060;
+      width: 90px;
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+    .stat-bar-bg {
+      flex: 1;
+      height: 12px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .stat-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width 0.6s ease-out;
+    }
+    .stat-bar-fill.power { background: linear-gradient(90deg, #c07818, #e8a020); }
+    .stat-bar-fill.reach { background: linear-gradient(90deg, #b8860b, #ffd700); }
+    .stat-bar-fill.versatility { background: linear-gradient(90deg, #2e8b57, #3cb371); }
+    .stat-value {
+      font-family: 'Silkscreen', monospace;
+      font-size: 10px;
+      color: #c0b088;
+      width: 24px;
+      text-align: right;
+    }
+
+    /* Kingdoms */
+    .kingdoms {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .kingdom-tag {
+      font-family: 'Silkscreen', monospace;
+      font-size: 10px;
+      color: #c0a870;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid #3a3020;
+      border-radius: 4px;
+      padding: 3px 8px;
+      letter-spacing: 1px;
+    }
+
+    /* Repos */
+    .repo-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      font-size: 12px;
+    }
+    .repo-item:last-child { border-bottom: none; }
+    .repo-icon { font-size: 14px; width: 20px; text-align: center; }
+    .repo-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .repo-name a { color: #c0a870; text-decoration: none; }
+    .repo-name a:hover { color: #ffd700; }
+    .repo-meta {
+      font-size: 10px;
+      color: #6a5a40;
+      white-space: nowrap;
+      display: flex;
+      gap: 8px;
+    }
+    .repo-stars { color: #ffd700; }
+    .repo-king { color: #ffd700; font-size: 10px; }
+
+    /* Footer actions */
+    .sheet-actions {
+      display: flex;
+      gap: 12px;
+      padding: 16px 24px;
+      justify-content: center;
+    }
+    .sheet-btn {
+      font-family: 'Silkscreen', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-decoration: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid #5a4a20;
+      color: #c0a870;
+      background: rgba(255,255,255,0.04);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sheet-btn:hover { background: rgba(139,105,20,0.2); color: #ffd700; border-color: #8b6914; }
+    .sheet-btn.primary {
+      background: linear-gradient(180deg, #e8a020, #c07818);
+      color: #1a1a2e;
+      border: none;
+    }
+    .sheet-btn.primary:hover { transform: scale(1.03); }
+
+    /* Loading / error */
+    .loading { text-align: center; padding: 64px; color: #8a7a58; font-size: 14px; }
+    .error { text-align: center; padding: 64px; color: #c04040; font-size: 14px; }
+    .error a { color: #ffd700; text-decoration: none; }
+
+    /* Floating bar */
+    .floating-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, rgba(22,33,62,0.95), rgba(26,26,46,0.98));
+      border-top: 2px solid #8b6914;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .floating-bar .bar-copy { font-size: 10px; color: #a89060; white-space: nowrap; }
+    .floating-bar .bar-copy a { font-size: inherit; color: #c0a870; }
+    .floating-bar .bar-links { display: flex; align-items: center; gap: 20px; }
+    .floating-bar a {
+      font-family: 'Silkscreen', monospace;
+      color: #a89060;
+      text-decoration: none;
+      font-size: 10px;
+      letter-spacing: 1px;
+      transition: color 0.2s;
+    }
+    .floating-bar a:hover { color: #ffd700; }
+    .floating-bar .bar-cta {
+      background: linear-gradient(180deg, #e8a020, #c07818);
+      color: #1a1a2e;
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    .floating-bar .bar-cta:hover { color: #1a1a2e; }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <a href="/"><div class="logo">GIT KINGDOM <span>CHARACTER SHEET</span></div></a>
+    <a href="/" class="back-link">← Back to Kingdom</a>
+  </header>
+
+  <div class="sheet-wrap">
+    <div id="sheet">
+      <div class="loading">Summoning citizen...</div>
+    </div>
+  </div>
+
+  <div class="floating-bar">
+    <div class="bar-copy">&copy; 2026 GitKingdom. Created by <a href="https://github.com/rgourley">Rob Gourley</a></div>
+    <div class="bar-links">
+      <a href="/about">About</a>
+      <a href="/how-it-works">How It Works</a>
+      <a href="/" class="bar-cta">Play</a>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var el = document.getElementById('sheet');
+
+      // Language colors
+      var langColors = {
+        JavaScript: '#f1e05a', TypeScript: '#3178c6', Python: '#3572a5',
+        Java: '#b07219', Go: '#00add8', Rust: '#dea584', Ruby: '#701516',
+        'C++': '#f34b7d', C: '#555555', 'C#': '#178600', Swift: '#f05138',
+        Kotlin: '#a97bff', PHP: '#4f5d95', Shell: '#89e051', Lua: '#000080',
+        Dart: '#00b4ab', Scala: '#c22d40', Zig: '#ec915c', Elixir: '#6e4a7e',
+      };
+
+      // Repo tier icons based on stars
+      function repoIcon(stars) {
+        if (stars >= 10000) return '🗡';
+        if (stars >= 1000) return '🛡';
+        if (stars >= 100) return '⚔';
+        if (stars >= 10) return '📜';
+        return '⚗';
+      }
+
+      function esc(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function fmtNum(n) {
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+        if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+        return String(n);
+      }
+
+      // Extract username from URL path: /citizen/username
+      var path = window.location.pathname;
+      var parts = path.split('/').filter(Boolean);
+      var username = parts.length >= 2 ? parts[1] : null;
+
+      if (!username) {
+        el.innerHTML = '<div class="error">No citizen specified. <a href="/">Return to Kingdom</a></div>';
+        return;
+      }
+
+      document.title = username + ' | Character Sheet | Git Kingdom';
+
+      fetch('/api/citizen/' + encodeURIComponent(username))
+        .then(function(res) {
+          if (res.status === 404) throw new Error('not_found');
+          if (!res.ok) throw new Error('fail');
+          return res.json();
+        })
+        .then(function(d) {
+          document.title = d.login + ' — ' + d.title.name + ' | Git Kingdom';
+
+          var html = '<div class="sheet">';
+
+          // Header
+          html += '<div class="sheet-header">';
+          html += '<img class="sheet-avatar" src="https://github.com/' + esc(d.login) + '.png?size=160" alt="" />';
+          html += '<div class="sheet-identity">';
+          html += '<div class="sheet-login">' + esc(d.title.icon) + ' ' + esc(d.login) + '</div>';
+          html += '<div class="sheet-title">' + esc(d.title.name) + ' of the ' + esc(d.title.kingdom) + ' Kingdom</div>';
+          html += '<div class="sheet-level">Level ' + d.level + ' · ' + fmtNum(d.xp) + ' XP</div>';
+          html += '<div class="sheet-contribs">' + d.totalContributions.toLocaleString() + ' contributions across ' + d.repos.length + ' repos</div>';
+          html += '</div></div>';
+
+          // Badges
+          if (d.badges.length > 0) {
+            html += '<div class="sheet-section">';
+            html += '<div class="section-title">Badges</div>';
+            html += '<div class="badges">';
+            for (var i = 0; i < d.badges.length; i++) {
+              var b = d.badges[i];
+              html += '<span class="badge"><span class="badge-icon">' + esc(b.icon) + '</span> ' + esc(b.label) + '</span>';
+            }
+            html += '</div></div>';
+          }
+
+          // Stats
+          html += '<div class="sheet-section">';
+          html += '<div class="section-title">Stats</div>';
+
+          var stats = [
+            { key: 'power', label: '⚔ Power', value: d.stats.power },
+            { key: 'reach', label: '⭐ Reach', value: d.stats.reach },
+            { key: 'versatility', label: '🌐 Versatility', value: d.stats.versatility },
+          ];
+          for (var si = 0; si < stats.length; si++) {
+            var st = stats[si];
+            var pct = (st.value / 20 * 100).toFixed(0);
+            html += '<div class="stat-row">';
+            html += '<span class="stat-label">' + st.label + '</span>';
+            html += '<div class="stat-bar-bg"><div class="stat-bar-fill ' + st.key + '" style="width:' + pct + '%"></div></div>';
+            html += '<span class="stat-value">' + st.value + '</span>';
+            html += '</div>';
+          }
+          html += '</div>';
+
+          // Kingdoms
+          if (d.languages.length > 0) {
+            html += '<div class="sheet-section">';
+            html += '<div class="section-title">Kingdoms</div>';
+            html += '<div class="kingdoms">';
+            for (var li = 0; li < d.languages.length; li++) {
+              html += '<span class="kingdom-tag">' + esc(d.languages[li]) + '</span>';
+            }
+            html += '</div></div>';
+          }
+
+          // Repos
+          if (d.repos.length > 0) {
+            html += '<div class="sheet-section">';
+            html += '<div class="section-title">Inventory (' + d.repos.length + ' repos)</div>';
+            for (var ri = 0; ri < d.repos.length; ri++) {
+              var r = d.repos[ri];
+              html += '<div class="repo-item">';
+              html += '<span class="repo-icon">' + repoIcon(r.stargazers) + '</span>';
+              html += '<span class="repo-name"><a href="https://github.com/' + esc(r.full_name) + '" target="_blank">' + esc(r.full_name) + '</a></span>';
+              html += '<span class="repo-meta">';
+              if (r.is_king) html += '<span class="repo-king">👑</span>';
+              html += '<span class="repo-stars">★' + fmtNum(r.stargazers) + '</span>';
+              if (r.language) html += '<span>' + esc(r.language) + '</span>';
+              html += '</span>';
+              html += '</div>';
+            }
+            html += '</div>';
+          }
+
+          // Actions
+          html += '<div class="sheet-actions">';
+          html += '<a href="https://github.com/' + esc(d.login) + '" target="_blank" class="sheet-btn primary">View on GitHub</a>';
+          html += '<button class="sheet-btn" onclick="copySheet()">Share Link</button>';
+          html += '</div>';
+
+          html += '</div>'; // .sheet
+          el.innerHTML = html;
+        })
+        .catch(function(err) {
+          if (err.message === 'not_found') {
+            el.innerHTML = '<div class="error">Citizen "' + esc(username) + '" not found in the kingdom.<br><br><a href="/">Return to Kingdom</a></div>';
+          } else {
+            el.innerHTML = '<div class="error">Failed to load character sheet.<br><br><a href="/">Return to Kingdom</a></div>';
+          }
+        });
+
+      // Share link
+      window.copySheet = function() {
+        var url = window.location.href;
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(url).then(function() {
+            var btn = document.querySelector('.sheet-btn:not(.primary)');
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(function() { btn.textContent = 'Share Link'; }, 2000); }
+          });
+        }
+      };
+    })();
+  </script>
+</body>
+</html>

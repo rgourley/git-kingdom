@@ -54,6 +54,27 @@ export default defineConfig({
   base: '/',
   plugins: [
     templateSavePlugin(),
+    // Serve citizen.html for /citizen/* routes in dev (mirrors Vercel rewrite)
+    {
+      name: 'citizen-rewrite',
+      configureServer(server) {
+        server.middlewares.use(async (req, res, next) => {
+          if (req.url?.startsWith('/citizen/')) {
+            try {
+              const html = readFileSync(resolve(__dirname, 'citizen.html'), 'utf-8');
+              const transformed = await server.transformIndexHtml(req.url, html);
+              res.setHeader('Content-Type', 'text/html');
+              res.statusCode = 200;
+              res.end(transformed);
+            } catch {
+              next();
+            }
+            return;
+          }
+          next();
+        });
+      },
+    },
     // Intercept /api/* requests in dev so Vite doesn't try to transform serverless .ts files
     {
       name: 'mock-api',
@@ -92,6 +113,7 @@ export default defineConfig({
         'how-it-works': resolve(__dirname, 'how-it-works.html'),
         faq: resolve(__dirname, 'faq.html'),
         admin: resolve(__dirname, 'admin.html'),
+        citizen: resolve(__dirname, 'citizen.html'),
       },
     },
   },
