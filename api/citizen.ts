@@ -1,11 +1,11 @@
 /**
- * GET /api/citizen/{username}
+ * GET /api/citizen?username={username}
  * Returns character sheet data for a GitHub citizen.
  * Queries Supabase for all repos this user contributes to,
  * computes RPG stats and badges.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createServiceClient } from '../lib/supabase';
+import { createServiceClient } from './lib/supabase';
 
 // ─── Title system (mirrored from CityScene.ts) ─────────────────
 const TITLE_TIERS: { min: number; icon: string; names: string[] }[] = [
