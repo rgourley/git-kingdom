@@ -4,6 +4,7 @@ import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePack
 import { generateWorld, WorldData, WorldKingdom, WorldSettlement } from '../generators/WorldGenerator';
 import { trackCityEntered, trackPageView } from '../analytics';
 
+// TODO: Make zoom levels configurable per device — mobile needs fewer steps
 // Stepped zoom levels for crisp pixel-art rendering (retro style)
 const WORLD_ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 

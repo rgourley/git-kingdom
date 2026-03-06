@@ -108,3 +108,5 @@ export function trackRepoAdded(params: {
 export function trackProfilePanelOpened(): void {
   trackEvent('profile_panel_opened');
 }
+
+// TODO: Add trackError() for logging client-side errors to analytics

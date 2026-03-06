@@ -109,6 +109,7 @@ async function fetchFullWorld(): Promise<WorldData | null> {
   }
 }
 
+// TODO: Add cache expiry (e.g. 5 minutes) so long-lived tabs eventually refresh
 /** Clear the memoized world cache (call after join to get fresh data) */
 export function invalidateWorldCache() { worldCache = undefined; }
 

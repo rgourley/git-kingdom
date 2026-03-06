@@ -19,6 +19,7 @@ function getBiome(lang: string): Biome {
     'C++': 'mountain', C: 'mountain', 'C#': 'tundra', PHP: 'forest',
     Swift: 'grassland', Kotlin: 'desert', Shell: 'desert',
   };
+  // TODO: Support additional biomes for unlisted languages (e.g. Haskell → tundra, Lua → desert)
   return m[lang] || 'grassland';
 }
 
@@ -313,6 +314,7 @@ async function boot() {
   const allMetrics = await loadWorldData(loadingEl);
 
   if (allMetrics.length === 0) {
+    // TODO: Show a more helpful empty state — offer to load demo data or sign in
     loadingEl.textContent = 'No world data available. Try refreshing.';
     return;
   }
@@ -332,6 +334,7 @@ async function boot() {
 
   loadingEl.textContent = `Building ${languageKingdoms.length} kingdoms...`;
 
+  // TODO: Avoid storing game state on window — use a typed singleton or Phaser registry instead
   (window as any).__gitworld = {
     kingdoms: languageKingdoms,
     spritePacks,
@@ -461,6 +464,7 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// TODO: Add error reporting service (e.g. Sentry) for production crash tracking
 boot().catch((err) => {
   console.error('Boot failed:', err);
   const loading = document.getElementById('loading');

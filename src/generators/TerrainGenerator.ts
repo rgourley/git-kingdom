@@ -10,7 +10,7 @@ function mulberry32(seed: number) {
   };
 }
 
-// Simple 2D value noise (cheaper than perlin, good enough for PoC)
+// TODO: Upgrade to Simplex noise for smoother terrain — value noise produces visible grid artifacts
 function createNoise(seed: number) {
   const rand = mulberry32(seed);
   const SIZE = 256;

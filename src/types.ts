@@ -89,7 +89,7 @@ export interface LanguageKingdom {
   totalStars: number;      // sum across all repos
 }
 
-// Keep old Kingdom type for backward compat with unused code
+// TODO: Remove deprecated Kingdom type once all references are cleaned up
 export interface Kingdom {
   metrics: KingdomMetrics;
   tier: SettlementTier;

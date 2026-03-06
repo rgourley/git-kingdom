@@ -46,6 +46,7 @@ function repoFreshness(pushedAt: string | undefined): number {
   return 0.8 * (1 - t * t);            // quadratic ease-out: fades faster at first
 }
 
+// TODO: Add accessibility — support high-contrast mode and colorblind-friendly palettes
 // Building rank colors for labels (8 tiers)
 const RANK_COLORS: Record<string, string> = {
   citadel: '#ffd700',
