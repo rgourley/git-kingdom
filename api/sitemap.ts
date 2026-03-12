@@ -1,25 +1,19 @@
 /**
- * GET /sitemap.xml — Dynamic XML sitemap.
+ * GET /sitemap.xml — Sitemap index.
  *
- * Queries Supabase for all languages and top repos,
- * generates a sitemap for search engine crawlers.
+ * Lists sub-sitemaps for static pages, repos, and users/citizens.
+ * Each sub-sitemap is paginated at 40 000 URLs to stay well under the
+ * 50 000-URL / 50 MB limits per sitemap file.
  * Cached at Vercel edge for 24 hours.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
 const BASE_URL = 'https://gitkingdom.com';
-
-// Languages that form kingdoms (lowercase slugs)
-const LANGUAGE_SLUGS = [
-  'javascript', 'typescript', 'python', 'rust', 'go', 'ruby', 'java',
-  'c', 'c++', 'c#', 'php', 'swift', 'kotlin', 'shell',
-];
+const MAX_URLS_PER_SITEMAP = 40_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).end('Method not allowed');
-  }
+  if (req.method !== 'GET') return res.status(405).end('Method not allowed');
 
   try {
     const supabase = createClient(
@@ -27,63 +21,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    // Fetch top repos by stars (limit to most significant ones)
-    const { data: repos } = await supabase
+    // Count total repos
+    const { count: repoCount } = await supabase
       .from('repos')
-      .select('full_name, language')
-      .order('stargazers', { ascending: false })
-      .limit(200);
+      .select('*', { count: 'exact', head: true });
+
+    // Count unique owners (each owner produces 2 URLs: /{user} + /citizen/{user})
+    const { data: ownerRows } = await supabase
+      .from('repos')
+      .select('owner_login')
+      .limit(100_000);
+
+    const uniqueOwnerCount = ownerRows
+      ? new Set(ownerRows.map(r => r.owner_login)).size
+      : 0;
+
+    const totalRepos = repoCount || 0;
+    const repoPages = Math.max(1, Math.ceil(totalRepos / MAX_URLS_PER_SITEMAP));
+    const usersPerPage = Math.floor(MAX_URLS_PER_SITEMAP / 2); // 2 URLs per user
+    const userPages = Math.max(1, Math.ceil(uniqueOwnerCount / usersPerPage));
 
     const today = new Date().toISOString().split('T')[0];
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${BASE_URL}/</loc>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>${BASE_URL}/api/sitemap/static</loc>
     <lastmod>${today}</lastmod>
-  </url>
+  </sitemap>
 `;
 
-    // Language kingdom pages
-    for (const slug of LANGUAGE_SLUGS) {
-      xml += `  <url>
-    <loc>${BASE_URL}/${encodeURIComponent(slug)}</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    for (let i = 1; i <= repoPages; i++) {
+      xml += `  <sitemap>
+    <loc>${BASE_URL}/api/sitemap/repos?page=${i}</loc>
     <lastmod>${today}</lastmod>
-  </url>
+  </sitemap>
 `;
     }
 
-    // Top repo pages
-    if (repos) {
-      for (const repo of repos) {
-        xml += `  <url>
-    <loc>${BASE_URL}/${encodeURIComponent(repo.full_name)}</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
+    for (let i = 1; i <= userPages; i++) {
+      xml += `  <sitemap>
+    <loc>${BASE_URL}/api/sitemap/users?page=${i}</loc>
     <lastmod>${today}</lastmod>
-  </url>
+  </sitemap>
 `;
-      }
     }
 
-    xml += `</urlset>`;
+    xml += `</sitemapindex>`;
 
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=172800');
     return res.send(xml);
-
   } catch (err: any) {
-    console.error('[/api/sitemap] Error:', err?.message);
-    // Return minimal sitemap on error
+    console.error('[sitemap index] Error:', err?.message);
+    const today = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=60');
     return res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>${BASE_URL}/</loc><priority>1.0</priority></url>
-</urlset>`);
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>${BASE_URL}/api/sitemap/static</loc>
+    <lastmod>${today}</lastmod>
+  </sitemap>
+</sitemapindex>`);
   }
 }

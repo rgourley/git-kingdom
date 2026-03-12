@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /api/
+Allow: /api/sitemap/
 Disallow: /editor.html
 
 Sitemap: https://gitkingdom.com/sitemap.xml
