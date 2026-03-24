@@ -394,11 +394,19 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // ── Camera ──
-    this.cameras.main.setBounds(0, 0, W * TILE_SIZE, H * TILE_SIZE);
-    this.cameras.main.centerOn((W / 2) * TILE_SIZE, (H / 2) * TILE_SIZE);
+    // Add ocean padding so the map stays centered on wide/tall screens.
+    // The padding ensures the camera bounds are at least as large as the viewport
+    // at minimum zoom, so the map never pins to one edge.
+    const mapW = W * TILE_SIZE;
+    const mapH = H * TILE_SIZE;
+    const minZoom = WORLD_ZOOM_LEVELS[WORLD_ZOOM_LEVELS.length - 1];
+    const padX = Math.max(0, (window.innerWidth / minZoom - mapW) / 2 + TILE_SIZE * 4);
+    const padY = Math.max(0, (window.innerHeight / minZoom - mapH) / 2 + TILE_SIZE * 4);
+    this.cameras.main.setBounds(-padX, -padY, mapW + padX * 2, mapH + padY * 2);
+    this.cameras.main.centerOn(mapW / 2, mapH / 2);
     this.cameras.main.setRoundPixels(true);
-    const fitZoomX = window.innerWidth / (W * TILE_SIZE);
-    const fitZoomY = window.innerHeight / (H * TILE_SIZE);
+    const fitZoomX = window.innerWidth / mapW;
+    const fitZoomY = window.innerHeight / mapH;
     const fitZoom = Math.max(0.25, Math.min(fitZoomX, fitZoomY) * 0.9);
     worldZoomIndex = nearestZoomIndex(fitZoom);
     this.cameras.main.setZoom(WORLD_ZOOM_LEVELS[worldZoomIndex]);
