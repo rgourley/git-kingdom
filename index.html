@@ -1498,8 +1498,8 @@
               status.textContent = d.error || 'Failed to add repo'; status.style.color = '#e07040';
             }
           })
-          .catch(function() { submitBtn.disabled = false; status.textContent = 'Network error'; status.style.color = '#e07040'; });
-        if (typeof turnstile !== 'undefined') turnstile.reset();
+          .catch(function() { submitBtn.disabled = false; status.textContent = 'Network error'; status.style.color = '#e07040'; })
+          .finally(function() { if (typeof turnstile !== 'undefined') turnstile.reset(); });
       });
     })();
   </script>
