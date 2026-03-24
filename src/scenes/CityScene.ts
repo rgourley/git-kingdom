@@ -563,21 +563,26 @@ export class CityScene extends Phaser.Scene {
           return;
         }
 
-        // Find building whose footprint contains the click (or closest within 2 tiles)
+        // Find building whose footprint contains the click
+        // Two passes: 1) exact hit (smallest wins), 2) nearest within 1 tile
         let closestBuilding: CityBuilding | null = null;
         let closestDist = Infinity;
+        // Pass 1: exact footprint hit — smallest building wins (for overlaps)
         for (const b of buildings) {
           const inside = tx >= b.x && tx < b.x + b.width && ty >= b.y && ty < b.y + b.height;
           if (inside) {
-            // Click is inside the footprint — pick the smallest building if overlapping
             const area = b.width * b.height;
             if (area < closestDist) { closestDist = area; closestBuilding = b; }
-          } else if (!closestBuilding) {
-            // Fallback: within 2 tiles of the edge
+          }
+        }
+        // Pass 2: no exact hit — find nearest building within 1 tile
+        if (!closestBuilding) {
+          closestDist = Infinity;
+          for (const b of buildings) {
             const dx = Math.max(b.x - tx, 0, tx - (b.x + b.width - 1));
             const dy = Math.max(b.y - ty, 0, ty - (b.y + b.height - 1));
             const d = dx + dy;
-            if (d <= 2 && d < closestDist) { closestDist = d; closestBuilding = b; }
+            if (d <= 1 && d < closestDist) { closestDist = d; closestBuilding = b; }
           }
         }
 
