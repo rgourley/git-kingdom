@@ -81,13 +81,18 @@ function groupByLanguage(allMetrics: KingdomMetrics[]): LanguageKingdom[] {
 
   // Languages with fewer than 3 repos get merged into Uncharted
   const MIN_REPOS_FOR_KINGDOM = 3;
+  const toMerge: string[] = [];
   for (const [language, repos] of groups) {
     if (language !== 'Uncharted' && repos.length < MIN_REPOS_FOR_KINGDOM) {
-      const uncharted = groups.get('Uncharted') || [];
-      uncharted.push(...repos);
-      groups.set('Uncharted', uncharted);
-      groups.delete(language);
+      toMerge.push(language);
     }
+  }
+  for (const language of toMerge) {
+    const repos = groups.get(language)!;
+    const uncharted = groups.get('Uncharted') || [];
+    uncharted.push(...repos);
+    groups.set('Uncharted', uncharted);
+    groups.delete(language);
   }
 
   const kingdoms: LanguageKingdom[] = [];
