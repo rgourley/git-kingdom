@@ -6,6 +6,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createServerClient, createServiceClient } from '../lib/supabase';
 import { fetchUserReposAsMetrics } from '../lib/github-server';
+import { getNextToken } from '../lib/github-tokens';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -29,14 +30,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const service = createServiceClient();
 
-    // Use server-side GitHub token for API calls
-    const githubToken = process.env.GITHUB_TOKEN;
-    if (!githubToken) {
+    // Use pooled GitHub token for API calls
+    let githubToken: string;
+    try {
+      githubToken = getNextToken();
+    } catch {
       return res.status(500).json({ error: 'Server GitHub token not configured' });
     }
 
     // Fetch user's repos from GitHub (with contributor data)
-    const metrics = await fetchUserReposAsMetrics(login, githubToken, 100, 1);
+    const MAX_REPOS_PER_JOIN = 50;
+    const metrics = await fetchUserReposAsMetrics(login, githubToken, MAX_REPOS_PER_JOIN, 1);
     console.log(`[join] ${login}: found ${metrics.length} repos`);
 
     let addedRepos = 0;
