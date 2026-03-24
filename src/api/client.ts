@@ -196,11 +196,14 @@ export async function fetchMyRepos(): Promise<UserRepo[] | null> {
 }
 
 /** Add a repo to the world (no auth required) */
-export async function addRepo(input: string): Promise<{ ok: boolean; repo?: string; language?: string; stars?: number; already?: boolean; error?: string }> {
+export async function addRepo(
+  input: string,
+  turnstileToken?: string,
+): Promise<{ ok: boolean; repo?: string; language?: string; stars?: number; already?: boolean; error?: string }> {
   const res = await fetch('/api/repo/add', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: input }),
+    body: JSON.stringify({ url: input, turnstileToken }),
   });
   return res.json();
 }
