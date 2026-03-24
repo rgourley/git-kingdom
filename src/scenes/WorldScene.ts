@@ -241,48 +241,52 @@ export class WorldScene extends Phaser.Scene {
       this.placeDecorations(terrain, ownership, W, H, settlements);
     }
 
-    // ── Kingdom border lines (thick + colored, rendered ABOVE trees) ──
-    const borderGfx = this.add.graphics();
-    borderGfx.setDepth(8); // above decorations (depth 3) and tilemap
-
+    // ── Kingdom border lines (batched for performance) ──
+    // Collect all border segments first, then draw in bulk per style
+    const borderSegments: { x0: number; y0: number; x1: number; y1: number; color: number }[] = [];
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const k = ownership[y][x];
         if (k < 0) continue;
         const color = KINGDOM_COLORS[k % KINGDOM_COLORS.length];
-
         const kr = x + 1 < W ? ownership[y][x + 1] : -1;
         const kb = y + 1 < H ? ownership[y + 1][x] : -1;
-
         if (kr >= 0 && kr !== k) {
           const bx = (x + 1) * TILE_SIZE;
-          const y0 = y * TILE_SIZE, y1 = (y + 1) * TILE_SIZE;
-          borderGfx.lineStyle(5, 0x000000, 0.7);
-          borderGfx.beginPath();
-          borderGfx.moveTo(bx, y0);
-          borderGfx.lineTo(bx, y1);
-          borderGfx.strokePath();
-          borderGfx.lineStyle(2.5, color, 1.0);
-          borderGfx.beginPath();
-          borderGfx.moveTo(bx, y0);
-          borderGfx.lineTo(bx, y1);
-          borderGfx.strokePath();
+          borderSegments.push({ x0: bx, y0: y * TILE_SIZE, x1: bx, y1: (y + 1) * TILE_SIZE, color });
         }
         if (kb >= 0 && kb !== k) {
           const by = (y + 1) * TILE_SIZE;
-          const x0 = x * TILE_SIZE, x1 = (x + 1) * TILE_SIZE;
-          borderGfx.lineStyle(5, 0x000000, 0.7);
-          borderGfx.beginPath();
-          borderGfx.moveTo(x0, by);
-          borderGfx.lineTo(x1, by);
-          borderGfx.strokePath();
-          borderGfx.lineStyle(2.5, color, 1.0);
-          borderGfx.beginPath();
-          borderGfx.moveTo(x0, by);
-          borderGfx.lineTo(x1, by);
-          borderGfx.strokePath();
+          borderSegments.push({ x0: x * TILE_SIZE, y0: by, x1: (x + 1) * TILE_SIZE, y1: by, color });
         }
       }
+    }
+
+    // Draw black outline pass (one beginPath for all segments)
+    const borderGfx = this.add.graphics();
+    borderGfx.setDepth(8);
+    borderGfx.lineStyle(5, 0x000000, 0.7);
+    borderGfx.beginPath();
+    for (const s of borderSegments) {
+      borderGfx.moveTo(s.x0, s.y0);
+      borderGfx.lineTo(s.x1, s.y1);
+    }
+    borderGfx.strokePath();
+
+    // Draw colored pass — group by color for fewer style switches
+    const byColor = new Map<number, typeof borderSegments>();
+    for (const s of borderSegments) {
+      if (!byColor.has(s.color)) byColor.set(s.color, []);
+      byColor.get(s.color)!.push(s);
+    }
+    for (const [color, segs] of byColor) {
+      borderGfx.lineStyle(2.5, color, 1.0);
+      borderGfx.beginPath();
+      for (const s of segs) {
+        borderGfx.moveTo(s.x0, s.y0);
+        borderGfx.lineTo(s.x1, s.y1);
+      }
+      borderGfx.strokePath();
     }
 
     // ── City labels with dark RPG banner for name only ──
