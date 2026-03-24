@@ -201,7 +201,10 @@ function showTitleScreen(): { waitForClick: () => Promise<void>; dismiss: () => 
   const enterBtn = document.getElementById('btn-enter');
   if (enterBtn) enterBtn.addEventListener('click', dismiss);
   modal.addEventListener('click', (e) => {
-    if (e.target === modal || (e.target as HTMLElement).classList.contains('entry-backdrop')) dismiss();
+    // Dismiss on click anywhere except links (credit link)
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'A' || target.closest('a')) return;
+    dismiss();
   });
 
   const onKey = (e: KeyboardEvent) => {

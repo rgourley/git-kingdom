@@ -130,6 +130,9 @@ export class CityScene extends Phaser.Scene {
   private hoverTooltipBg!: Phaser.GameObjects.Graphics;
   private hoverTooltipText!: Phaser.GameObjects.Text;
   private hoveredBuildingIndex = -1; // track which building's always-on label to hide
+  // Bouncing pointer arrow for highlighting buildings
+  private pointerArrow: Phaser.GameObjects.Container | null = null;
+  private pointerArrowTween: Phaser.Tweens.Tween | null = null;
   // Track DOM event listeners for cleanup on scene switch
   private domListeners: { el: HTMLElement; event: string; handler: EventListener }[] = [];
 
@@ -149,6 +152,59 @@ export class CityScene extends Phaser.Scene {
       el.removeEventListener(event, handler);
     }
     this.domListeners = [];
+  }
+
+  /** Show a bouncing arrow above a building. Click anywhere or Esc dismisses it. */
+  private showPointerArrow(x: number, y: number) {
+    this.hidePointerArrow();
+
+    // Draw a downward-pointing triangle arrow
+    const arrow = this.add.graphics();
+    arrow.fillStyle(0xffd700, 1);
+    arrow.fillTriangle(-8, -16, 8, -16, 0, 0);
+    // Small shadow
+    const shadow = this.add.graphics();
+    shadow.fillStyle(0x000000, 0.3);
+    shadow.fillEllipse(0, 4, 16, 6);
+
+    const container = this.add.container(x, y, [shadow, arrow]);
+    container.setDepth(200);
+
+    this.pointerArrow = container;
+    this.pointerArrowTween = this.tweens.add({
+      targets: container,
+      y: y - 8,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Dismiss on click anywhere or Esc
+    const dismissOnClick = () => {
+      this.hidePointerArrow();
+      this.input.off('pointerdown', dismissOnClick);
+    };
+    this.input.once('pointerdown', dismissOnClick);
+
+    const dismissOnEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        this.hidePointerArrow();
+        document.removeEventListener('keydown', dismissOnEsc);
+      }
+    };
+    document.addEventListener('keydown', dismissOnEsc);
+  }
+
+  private hidePointerArrow() {
+    if (this.pointerArrowTween) {
+      this.pointerArrowTween.destroy();
+      this.pointerArrowTween = null;
+    }
+    if (this.pointerArrow) {
+      this.pointerArrow.destroy();
+      this.pointerArrow = null;
+    }
   }
 
   create() {
@@ -442,23 +498,8 @@ export class CityScene extends Phaser.Scene {
           // Zoom in close
           cityZoomIndex = 4; // 2x zoom
           this.cameras.main.setZoom(CITY_ZOOM_LEVELS[cityZoomIndex]);
-          // Add a pulsing highlight ring
-          const ring = this.add.graphics();
-          ring.lineStyle(3, 0xff4444, 1);
-          ring.strokeRect(
-            targetBuilding.x * TILE_SIZE - 4,
-            targetBuilding.y * TILE_SIZE - 4,
-            targetBuilding.width * TILE_SIZE + 8,
-            targetBuilding.height * TILE_SIZE + 8,
-          );
-          ring.setDepth(100);
-          this.tweens.add({
-            targets: ring,
-            alpha: { from: 1, to: 0.3 },
-            duration: 800,
-            yoyo: true,
-            repeat: -1,
-          });
+          // Show bouncing arrow above the building
+          this.showPointerArrow(bx, targetBuilding.y * TILE_SIZE - 12);
           console.log(`[Deep link] Focused on ${focusRepo} at (${targetBuilding.x}, ${targetBuilding.y})`);
         }
       }
@@ -1870,13 +1911,15 @@ export class CityScene extends Phaser.Scene {
       const by = parseInt(item.dataset.by!, 10);
       const b = buildings.find(b => b.x === bx && b.y === by);
       if (b) {
-        this.cameras.main.pan(
-          (b.x + b.width / 2) * TILE_SIZE,
-          (b.y + b.height / 2) * TILE_SIZE,
-          500, 'Power2'
-        );
+        const bx = (b.x + b.width / 2) * TILE_SIZE;
+        const by = (b.y + b.height / 2) * TILE_SIZE;
+        this.cameras.main.pan(bx, by, 500, 'Power2');
         this.cameras.main.zoomTo(3, 500);
         this.showBuildingInfo(b);
+        // Show bouncing arrow after camera finishes panning
+        this.time.delayedCall(550, () => {
+          this.showPointerArrow(bx, b.y * TILE_SIZE - 12);
+        });
       }
     });
 
