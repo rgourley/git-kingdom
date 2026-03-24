@@ -429,7 +429,7 @@ export class WorldScene extends Phaser.Scene {
       this.cameras.main.setZoom(stepZoom(deltaY));
     });
 
-    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+    const onPointerUp = (pointer: Phaser.Input.Pointer) => {
       if (isDragging) { isDragging = false; return; }
       const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       const tx = Math.floor(wp.x / TILE_SIZE);
@@ -441,6 +441,12 @@ export class WorldScene extends Phaser.Scene {
       } else {
         this.hideInfoPanel();
       }
+    };
+    this.input.on('pointerup', onPointerUp);
+
+    // Clean up input handlers when scene shuts down (prevents ghost clicks in CityScene)
+    this.events.once('shutdown', () => {
+      this.input.off('pointerup', onPointerUp);
     });
 
     let dragStartX = 0, dragStartY = 0;
