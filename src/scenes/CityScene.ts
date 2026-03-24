@@ -557,7 +557,7 @@ export class CityScene extends Phaser.Scene {
         }
 
         if (clickedCitizen) {
-          this.showCitizenInfo(clickedCitizen);
+          this.showCharacterSheet(clickedCitizen.login);
           return;
         }
 
@@ -1571,55 +1571,9 @@ export class CityScene extends Phaser.Scene {
     panel.style.display = 'block';
   }
 
-  /** Open a citizen's info card by their login name */
+  /** Open a citizen's character sheet directly by login name */
   private openCitizenByLogin(login: string) {
-    // Find the walking citizen sprite if they're on screen
-    const walking = this.citizenSprites.find((wc: WalkingCitizen) => wc.login === login);
-    if (walking) {
-      this.showCitizenInfo(walking);
-      return;
-    }
-    // Citizen exists in data but not on screen — show info directly from data
-    const citizen = this.city.citizens.find(ci => ci.login === login);
-    if (!citizen) return;
-
-    const panel = document.getElementById('info-panel')!;
-    const isKing = this.city.king?.login === login;
-    const rank = this.city.citizens.findIndex(ci => ci.login === login);
-    const total = this.city.citizens.length;
-    const { icon, title } = citizenTitle(rank, total, isKing, citizen.totalContributions);
-
-    const avatarEl = document.getElementById('info-avatar') as HTMLImageElement;
-    avatarEl.src = `https://github.com/${citizen.login}.png?size=128`;
-    avatarEl.alt = citizen.login;
-    avatarEl.style.display = 'block';
-    avatarEl.onerror = () => { avatarEl.style.display = 'none'; };
-
-    document.getElementById('info-name')!.innerHTML =
-      icon + ' ' + ghLink(citizen.login);
-    document.getElementById('info-tier')!.textContent =
-      `${title} of the ${this.city.language} Kingdom`;
-
-    const repoLinks = citizen.repos.map((r: string) =>
-      ghLink(r, r.split('/').pop() || r)
-    ).join(', ');
-    const stats = [
-      stat('Contributions', citizen.totalContributions.toLocaleString()),
-      `<div class="stat"><span class="stat-label">Repos</span><span class="stat-value">${repoLinks}</span></div>`,
-    ];
-
-    document.getElementById('info-stats')!.innerHTML = stats.join('');
-    const kingEl2 = document.getElementById('info-king')!;
-    kingEl2.innerHTML =
-      `<button class="sheet-link" data-login="${esc(citizen.login)}">📜 View Sheet</button>`;
-    const sheetBtn2 = kingEl2.querySelector('.sheet-link') as HTMLElement;
-    if (sheetBtn2) {
-      this.trackListener(sheetBtn2, 'click', () => {
-        this.showCharacterSheet(citizen.login);
-      });
-    }
-    if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
-    panel.style.display = 'block';
+    this.showCharacterSheet(login);
   }
 
   private hideInfoPanel() {
@@ -1962,7 +1916,7 @@ export class CityScene extends Phaser.Scene {
       this.trackListener(el as HTMLElement, 'click', (e) => {
         e.stopPropagation();
         const login = (el as HTMLElement).dataset.login;
-        if (login) this.openCitizenByLogin(login);
+        if (login) this.showCharacterSheet(login);
       });
     });
 
