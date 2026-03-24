@@ -233,7 +233,7 @@ function createPhaserGame(): Phaser.Game {
     height: window.innerHeight,
     pixelArt: true,
     roundPixels: true,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#3878a8',
     render: {
       antialias: false,
       roundPixels: true,
