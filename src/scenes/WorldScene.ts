@@ -394,22 +394,27 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // ── Camera ──
-    // Add ocean padding so the map stays centered on wide/tall screens.
-    // The padding ensures the camera bounds are at least as large as the viewport
-    // at minimum zoom, so the map never pins to one edge.
     const mapW = W * TILE_SIZE;
     const mapH = H * TILE_SIZE;
-    const minZoom = WORLD_ZOOM_LEVELS[WORLD_ZOOM_LEVELS.length - 1];
-    const padX = Math.max(0, (window.innerWidth / minZoom - mapW) / 2 + TILE_SIZE * 4);
-    const padY = Math.max(0, (window.innerHeight / minZoom - mapH) / 2 + TILE_SIZE * 4);
-    this.cameras.main.setBounds(-padX, -padY, mapW + padX * 2, mapH + padY * 2);
-    this.cameras.main.centerOn(mapW / 2, mapH / 2);
     this.cameras.main.setRoundPixels(true);
+
+    // Determine zoom first so we can size bounds to match
     const fitZoomX = window.innerWidth / mapW;
     const fitZoomY = window.innerHeight / mapH;
     const fitZoom = Math.max(0.25, Math.min(fitZoomX, fitZoomY) * 0.9);
     worldZoomIndex = nearestZoomIndex(fitZoom);
-    this.cameras.main.setZoom(WORLD_ZOOM_LEVELS[worldZoomIndex]);
+    const actualZoom = WORLD_ZOOM_LEVELS[worldZoomIndex];
+    this.cameras.main.setZoom(actualZoom);
+
+    // Add ocean padding so the map stays centered on wide/tall screens.
+    // At any zoom level, ensure bounds are at least viewport-sized so
+    // the camera can always center the map (never pins to an edge).
+    const viewW = window.innerWidth / actualZoom;
+    const viewH = window.innerHeight / actualZoom;
+    const padX = Math.max(mapW, viewW * 1.2) / 2 - mapW / 2;
+    const padY = Math.max(mapH, viewH * 1.2) / 2 - mapH / 2;
+    this.cameras.main.setBounds(-padX, -padY, mapW + padX * 2, mapH + padY * 2);
+    this.cameras.main.centerOn(mapW / 2, mapH / 2);
 
     // ── Input ──
     this.cursors = this.input.keyboard!.createCursorKeys();
