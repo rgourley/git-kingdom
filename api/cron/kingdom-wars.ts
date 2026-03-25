@@ -221,8 +221,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Step 5: Spark new battles ──
+    // Check ALL active battles (re-fetch to avoid race conditions with concurrent cron runs)
+    const { data: currentActiveBattles } = await supabase
+      .from('kingdom_battles')
+      .select('kingdom_a, kingdom_b')
+      .eq('status', 'active');
+
     const activeKingdoms = new Set<string>();
-    for (const b of activeBattles ?? []) {
+    for (const b of currentActiveBattles ?? []) {
       activeKingdoms.add(b.kingdom_a);
       activeKingdoms.add(b.kingdom_b);
     }
