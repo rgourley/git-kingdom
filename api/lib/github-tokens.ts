@@ -2,7 +2,8 @@
  * Round-robin GitHub token pool.
  *
  * Reads GITHUB_TOKEN (required) and GITHUB_TOKEN_2, GITHUB_TOKEN_3, etc.
- * Rotates across tokens on each call to spread API quota.
+ * Rotates across tokens on each call within a warm serverless instance.
+ * Note: counter resets on cold starts, so rotation is best-effort, not guaranteed even.
  */
 
 let tokens: string[] = [];

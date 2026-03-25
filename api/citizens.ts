@@ -34,9 +34,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('users')
       .select('*', { count: 'exact', head: true });
 
-    // Unique citizens = we'll use a generous estimate
-    // (many contributors are also registered users)
-    const total = Math.max(totalContributors || 0, totalUsers || 0);
+    // Total unique citizens across all repos (contributors table)
+    // Used for the title screen count — padded to 200 minimum on the frontend
+    const total = totalContributors || 0;
 
     // Get recently registered users with their top repos
     const { data: users, error } = await supabase

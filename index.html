@@ -1334,7 +1334,7 @@
           // Store user info globally for game scenes
           window.__gkUser = user;
           // Auto-join: if first login cookie is set, trigger join immediately
-          if (document.cookie.indexOf('gk_needs_join=1') !== -1) {
+          if (document.cookie.split(';').some(function(c) { return c.trim() === 'gk_needs_join=1'; })) {
             // Clear the cookie
             document.cookie = 'gk_needs_join=; Path=/; Max-Age=0';
             // Auto-open profile panel and start claiming
@@ -1452,13 +1452,17 @@
         })
         .catch(function() {
           subtitleEl.textContent = 'Failed to load repos';
-          reposEl.innerHTML = '<div style="margin-top:8px;text-align:center">' +
-            '<button id="profile-retry" class="rpgui-button golden" style="font-size:9px"><p>Retry</p></button></div>';
-          document.getElementById('profile-retry').addEventListener('click', function() {
-            claimUserRepos(subtitleEl, reposEl);
-          });
+          showRetryButton(reposEl, subtitleEl);
         });
     };
+
+    function showRetryButton(reposEl, subtitleEl, label) {
+      reposEl.innerHTML = '<div style="margin-top:8px;text-align:center">' +
+        '<button class="rpgui-button golden profile-retry-btn" style="font-size:9px"><p>' + (label || 'Retry') + '</p></button></div>';
+      reposEl.querySelector('.profile-retry-btn').addEventListener('click', function() {
+        claimUserRepos(subtitleEl, reposEl);
+      });
+    }
 
     function claimUserRepos(subtitleEl, reposEl) {
       subtitleEl.textContent = 'Fetching your repos from GitHub...';
@@ -1474,12 +1478,8 @@
         abortController.abort();
         subtitleEl.textContent = 'Taking longer than expected...';
         reposEl.innerHTML = '<div style="font-size:9px;color:#e07040;text-align:center;margin-top:8px">' +
-          'The server might be busy. Your repos may still be processing.</div>' +
-          '<div style="margin-top:8px;text-align:center">' +
-          '<button id="profile-retry" class="rpgui-button golden" style="font-size:9px"><p>Try Again</p></button></div>';
-        document.getElementById('profile-retry').addEventListener('click', function() {
-          claimUserRepos(subtitleEl, reposEl);
-        });
+          'The server might be busy. Your repos may still be processing.</div>';
+        showRetryButton(reposEl, subtitleEl, 'Try Again');
       }, 45000);
 
       fetch('/api/world/join', { method: 'POST', credentials: 'include', signal: abortController.signal })
@@ -1490,11 +1490,7 @@
 
           if (!joinData || !joinData.ok) {
             subtitleEl.textContent = 'Failed to claim repos';
-            reposEl.innerHTML = '<div style="margin-top:8px;text-align:center">' +
-              '<button id="profile-retry" class="rpgui-button golden" style="font-size:9px"><p>Retry</p></button></div>';
-            document.getElementById('profile-retry').addEventListener('click', function() {
-              claimUserRepos(subtitleEl, reposEl);
-            });
+            showRetryButton(reposEl, subtitleEl);
             return;
           }
 
@@ -1530,11 +1526,7 @@
           clearTimeout(timeout);
           if (timedOut) return;
           subtitleEl.textContent = 'Failed to claim repos';
-          reposEl.innerHTML = '<div style="margin-top:8px;text-align:center">' +
-            '<button id="profile-retry" class="rpgui-button golden" style="font-size:9px"><p>Retry</p></button></div>';
-          document.getElementById('profile-retry').addEventListener('click', function() {
-            claimUserRepos(subtitleEl, reposEl);
-          });
+          showRetryButton(reposEl, subtitleEl);
         });
     }
 
