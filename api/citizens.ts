@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: users, error } = await supabase
       .from('users')
       .select('login, avatar_url, id')
-      .order('id', { ascending: false })
+      .order('joined_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (error) {
