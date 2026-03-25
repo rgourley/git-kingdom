@@ -57,6 +57,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // World stats
     const { count: totalRepos } = await service.from('repos').select('*', { count: 'exact', head: true });
     const { count: totalUsers } = await service.from('users').select('*', { count: 'exact', head: true });
+    const { count: totalContributors } = await service.from('contributors').select('login', { count: 'exact', head: true });
+
+    // Language breakdown
+    const { data: allRepos } = await service.from('repos').select('language, stargazers').gte('stargazers', 1);
+    const langMap: Record<string, { repos: number; stars: number }> = {};
+    for (const r of allRepos || []) {
+      const lang = r.language || 'null';
+      if (!langMap[lang]) langMap[lang] = { repos: 0, stars: 0 };
+      langMap[lang].repos++;
+      langMap[lang].stars += r.stargazers || 0;
+    }
+    const languages = Object.entries(langMap)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.repos - a.repos);
+
+    // GitHub API quota
+    let githubQuota = null;
+    try {
+      const healthRes = await fetch(`https://${req.headers.host}/api/health`);
+      if (healthRes.ok) {
+        const health = await healthRes.json();
+        githubQuota = health.checks?.github;
+      }
+    } catch { /* non-critical */ }
 
     // Group repos by fetched_at date to show "batches" (each join creates a batch)
     const activity: { date: string; owner: string; avatar: string; repos: any[] }[] = [];
@@ -88,7 +112,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       stats: {
         totalRepos: totalRepos || 0,
         totalUsers: totalUsers || 0,
+        totalContributors: totalContributors || 0,
       },
+      languages,
+      githubQuota,
       users: users || [],
       activity,
     });

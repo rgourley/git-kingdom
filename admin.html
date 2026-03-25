@@ -236,8 +236,40 @@
           html += '<div class="stats">';
           html += '<div class="stat-card"><div class="stat-number">' + data.stats.totalRepos + '</div><div class="stat-label">Total Repos</div></div>';
           html += '<div class="stat-card"><div class="stat-number">' + data.stats.totalUsers + '</div><div class="stat-label">Registered Users</div></div>';
+          html += '<div class="stat-card"><div class="stat-number">' + data.stats.totalContributors + '</div><div class="stat-label">Contributors</div></div>';
           html += '<div class="stat-card"><div class="stat-number">' + data.activity.length + '</div><div class="stat-label">Join Events</div></div>';
           html += '</div>';
+
+          // GitHub API Quota
+          if (data.githubQuota && data.githubQuota.tokens) {
+            html += '<h2>GitHub API Quota</h2>';
+            html += '<div class="stats">';
+            for (var t = 0; t < data.githubQuota.tokens.length; t++) {
+              var tk = data.githubQuota.tokens[t];
+              var pct = tk.limit ? Math.round((tk.remaining / tk.limit) * 100) : 0;
+              var color = pct > 50 ? '#90d070' : pct > 20 ? '#e0c040' : '#e05040';
+              html += '<div class="stat-card"><div class="stat-number" style="color:' + color + '">' + (tk.remaining || 0) + '</div>';
+              html += '<div class="stat-label">Token ' + tk.token + ' / ' + (tk.limit || '?') + '</div></div>';
+            }
+            html += '</div>';
+          }
+
+          // Languages
+          html += '<h2>Languages (' + data.languages.length + ')</h2>';
+          html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+          html += '<tr style="color:#8a7a58;text-align:left;border-bottom:1px solid #3a3020"><th style="padding:6px">Language</th><th style="padding:6px">Repos</th><th style="padding:6px">Stars</th><th style="padding:6px">Status</th></tr>';
+          for (var li = 0; li < data.languages.length; li++) {
+            var lang = data.languages[li];
+            var dot = langColors[lang.name] || '#888';
+            var status = lang.repos >= 3 ? '<span style="color:#90d070">Kingdom</span>' : '<span style="color:#8a7a58">Uncharted (' + lang.repos + '/3)</span>';
+            html += '<tr style="border-bottom:1px solid #2a2418">';
+            html += '<td style="padding:6px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + esc(dot) + ';margin-right:6px"></span>' + esc(lang.name) + '</td>';
+            html += '<td style="padding:6px">' + lang.repos + '</td>';
+            html += '<td style="padding:6px">' + (lang.stars >= 1000 ? Math.round(lang.stars / 1000) + 'k' : lang.stars) + '</td>';
+            html += '<td style="padding:6px">' + status + '</td>';
+            html += '</tr>';
+          }
+          html += '</table>';
 
           // Users
           html += '<h2>Registered Users</h2>';
