@@ -427,26 +427,15 @@ async function bootDirect(
   loadingEl.textContent = `Building ${languageKingdoms.length} kingdoms...`;
   await new Promise(r => setTimeout(r, 50));
 
-  const game = createPhaserGame();
-  game.scene.add('WorldScene', WorldScene, true, {
-    kingdoms: languageKingdoms,
-    spritePacks,
-    highlightUser,
-  });
-  game.scene.add('CityScene', CityScene, false);
-  trackPageView(`/${highlightUser || ''}`, `Git Kingdom | ${highlightUser || 'World Map'}`);
-
   (window as any).__gitworld = {
     kingdoms: languageKingdoms,
     spritePacks,
     highlightUser,
     focusRepo: focusRepo || null,
   };
-  (window as any).__game = game;
 
-  // Deep link: /username (no repo) → find their top repo's kingdom, enter city, show character sheet
+  // Deep link: /username (no repo) → go straight to their city, skip WorldScene entirely
   if (highlightUser && !focusRepo) {
-    // Find the kingdom where this user has the most repos (or their top-starred repo)
     const userRepos = languageKingdoms
       .flatMap(k => k.repos.filter(r =>
         r.contributors?.some(c => c.login.toLowerCase() === highlightUser.toLowerCase()) ||
@@ -461,12 +450,13 @@ async function bootDirect(
         k.repos.some(r => r.repo.full_name === topRepo.repo.full_name)
       );
     }
-    // Fallback: if user has no matching repos, send them to Uncharted
     if (!targetKingdom) {
       targetKingdom = languageKingdoms.find(k => k.language === 'Uncharted');
     }
     if (targetKingdom) {
-      game.scene.start('CityScene', {
+      const game = createPhaserGame();
+      game.scene.add('WorldScene', WorldScene, false);
+      game.scene.add('CityScene', CityScene, true, {
         kingdom: targetKingdom,
         spritePacks,
         highlightUser,
@@ -478,10 +468,22 @@ async function bootDirect(
         },
         autoShowSheet: highlightUser,
       });
+      (window as any).__game = game;
       console.log(`[User link] Jumping to ${targetKingdom.language} city for ${highlightUser}`);
       trackPageView(`/city/${targetKingdom.language.toLowerCase()}`, `Git Kingdom | ${highlightUser}`);
+      return;
     }
   }
+
+  const game = createPhaserGame();
+  game.scene.add('WorldScene', WorldScene, true, {
+    kingdoms: languageKingdoms,
+    spritePacks,
+    highlightUser,
+  });
+  game.scene.add('CityScene', CityScene, false);
+  (window as any).__game = game;
+  trackPageView(`/${highlightUser || ''}`, `Git Kingdom | ${highlightUser || 'World Map'}`);
 
   // Deep link: /owner/repo → jump straight into the city containing that repo
   if (focusRepo && highlightUser) {
