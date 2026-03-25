@@ -538,6 +538,36 @@ export class WorldScene extends Phaser.Scene {
     // Live event feed
     initEventFeed((cb) => this.events.on('shutdown', cb));
 
+    // Fetch rankings and add crown to #1 kingdom on the map
+    void (async () => {
+      try {
+        const res = await fetch('/api/rankings');
+        const { rankings } = await res.json();
+        const topKingdom = (rankings as { metric: string; rank: number; language: string }[])
+          .filter(r => r.metric === 'kingdom_power')
+          .sort((a, b) => a.rank - b.rank)[0];
+
+        if (topKingdom) {
+          const ki = kingdoms.findIndex(k => k.language === topKingdom.language);
+          if (ki !== -1) {
+            const container = this.kingdomLabels[ki] as unknown as Phaser.GameObjects.Container;
+            // Position crown just to the right of the banner (banner is ~(nameLabel.width + 20) wide)
+            // We measure via the nameLabel child (index 1 when banner exists, 0 otherwise)
+            const nameChild = container.list.find(
+              (c): c is Phaser.GameObjects.Text =>
+                c instanceof Phaser.GameObjects.Text && c.y === 0
+            );
+            const bannerHalfW = nameChild ? Math.round((nameChild.width + 20) / 2) : 40;
+            const crown = this.add.text(bannerHalfW + 4, 0, '👑', {
+              fontSize: '14px',
+            });
+            crown.setOrigin(0, 0.5);
+            container.add(crown);
+          }
+        }
+      } catch { /* silent — crown is optional */ }
+    })();
+
     // Restore controls hint (now at bottom)
     const hint = document.getElementById('controls-hint');
     if (hint) hint.textContent = 'WASD/Arrows: scroll · Mouse wheel: zoom · Click kingdom: inspect';
