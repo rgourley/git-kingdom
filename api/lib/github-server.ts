@@ -131,7 +131,7 @@ async function fetchLastCommitMessage(
 ): Promise<string | undefined> {
   try {
     const res = await fetch(
-      `${GH_API}/repos/${owner}/${repo}/commits?author=${author}&per_page=1`,
+      `${GH_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?author=${encodeURIComponent(author)}&per_page=1`,
       { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.v3+json' } }
     );
     if (!res.ok) return undefined;
