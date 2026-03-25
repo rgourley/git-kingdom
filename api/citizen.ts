@@ -178,7 +178,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const totalContributions = repoList.reduce((s, r) => s + r.contributions, 0);
     const totalStars = repoList.reduce((s, r) => s + r.stargazers, 0);
     const languages = [...new Set(repoList.map(r => r.language).filter(Boolean))] as string[];
-    const isKing = repoList.some(r => r.king_login?.toLowerCase() === login.toLowerCase());
+    // Only grant king title if user is king of the top-starred repo in their primary language
+    // Being king of any small repo is too common — ~50% of contributors would be "Sovereign"
+    const topRepo = repoList.filter(r => r.language === primaryLanguage).sort((a, b) => b.stargazers - a.stargazers)[0];
+    const isKing = topRepo ? topRepo.king_login?.toLowerCase() === login.toLowerCase() : false;
 
     // 5. Compute RPG elements
     const title = getTitle(totalContributions, isKing);
