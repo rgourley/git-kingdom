@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { WorldScene } from './scenes/WorldScene';
 import { CityScene } from './scenes/CityScene';
 import { TitleScene } from './scenes/TitleScene';
-import { KingdomMetrics, LanguageKingdom, ContributorData, Biome } from './types';
+import { KingdomMetrics } from './types';
 import { SpritePacks } from './generators/TilesetGenerator';
 import { generateTestRepos } from './testdata';
 import { parseRoute } from './router';
@@ -11,128 +11,8 @@ import {
   trackPageView, trackGameStart, trackWorldJoined,
   trackGitHubLinkClicked, trackSignInInitiated,
 } from './analytics';
+import { groupByLanguage } from './groupByLanguage';
 
-function getBiome(lang: string): Biome {
-  const m: Record<string, Biome> = {
-    JavaScript: 'grassland', TypeScript: 'grassland', Python: 'forest',
-    Rust: 'volcanic', Go: 'mountain', Ruby: 'crystal', Java: 'desert',
-    'C++': 'mountain', C: 'mountain', 'C#': 'tundra', PHP: 'forest',
-    Swift: 'grassland', Kotlin: 'desert', Shell: 'desert',
-    Uncharted: 'mist',
-  };
-  return m[lang] || 'grassland';
-}
-
-/**
- * Filter out non-code "content repos" — awesome-lists, roadmaps, interview prep,
- * cheatsheets, etc.  GitHub often tags these with a language (TypeScript, JavaScript)
- * even though they're curated markdown/docs, not real software.
- * Keeping them distorts kingdom rankings (e.g. developer-roadmap was TypeScript's #1).
- */
-function isContentRepo(m: KingdomMetrics): boolean {
-  const name = (m.repo.name || '').toLowerCase();
-
-  const contentNamePatterns = [
-    /^awesome[-_]/, /[-_]awesome$/,                       // awesome-lists
-    /[-_]roadmap$/, /^roadmap[-_]/,                       // roadmaps
-    /[-_]interview[s]?$/, /^interview[-_]/,               // interview prep
-    /[-_]cheatsheet/, /^cheatsheet/,                      // cheatsheets
-    /^clean[-_]code/,                                     // clean-code books
-    /^build[-_]your[-_]own/,                              // tutorial collections
-    /^(the[-_])?book[-_]of[-_]/,                          // book repos
-    /^(the[-_])?art[-_]of[-_]/,                           // art-of-X repos
-    /^(system[-_])?design[-_](primer|interview)$/,        // system design
-    /^coding[-_](interview|challenge)/,                   // interview prep
-    /[-_]best[-_]?practices$/,                            // best practices lists
-    /^papers[-_]we[-_]love$/,                             // paper collections
-    /^free[-_].*[-_](books|courses|resources)/,           // free resource lists
-    /^beginners[-_].*[-_]tutorial$/,                      // beginner tutorials (content-only)
-  ];
-
-  return contentNamePatterns.some(p => p.test(name));
-}
-
-function groupByLanguage(allMetrics: KingdomMetrics[]): LanguageKingdom[] {
-  const groups = new Map<string, KingdomMetrics[]>();
-
-  // Non-programming languages that should always go to Uncharted
-  const LANGUAGE_BLOCKLIST = new Set([
-    'HTML', 'CSS', 'SCSS', 'Less', 'Markdown', 'Dockerfile',
-    'Makefile', 'Nix', 'HCL', 'Vue', 'Blade', 'FreeMarker',
-    'Vim Script', 'LLVM', 'Wren', 'BASIC', 'Batchfile',
-    'PowerShell', 'Nunjucks', 'EJS', 'Handlebars', 'Pug',
-    'Smarty', 'Twig', 'Mustache', 'XSLT', 'Jsonnet',
-  ]);
-
-  let filtered = 0;
-  for (const m of allMetrics) {
-    let lang = m.repo.language || 'Uncharted';
-    if (isContentRepo(m)) {
-      filtered++;
-      continue;
-    }
-    if (LANGUAGE_BLOCKLIST.has(lang)) lang = 'Uncharted';
-    if (!groups.has(lang)) groups.set(lang, []);
-    groups.get(lang)!.push(m);
-  }
-  if (filtered > 0) {
-    console.log(`Filtered ${filtered} content repos (awesome-lists, roadmaps, etc.)`);
-  }
-
-  // Languages with fewer than 3 repos get merged into Uncharted
-  const MIN_REPOS_FOR_KINGDOM = 3;
-  const toMerge: string[] = [];
-  for (const [language, repos] of groups) {
-    if (language !== 'Uncharted' && repos.length < MIN_REPOS_FOR_KINGDOM) {
-      toMerge.push(language);
-    }
-  }
-  for (const language of toMerge) {
-    const repos = groups.get(language)!;
-    const uncharted = groups.get('Uncharted') || [];
-    uncharted.push(...repos);
-    groups.set('Uncharted', uncharted);
-    groups.delete(language);
-  }
-
-  const kingdoms: LanguageKingdom[] = [];
-  for (const [language, repos] of groups) {
-    const commitsByUser = new Map<string, { login: string; contributions: number; avatar_url: string }>();
-    for (const r of repos) {
-      for (const c of r.contributors) {
-        const existing = commitsByUser.get(c.login);
-        if (existing) {
-          existing.contributions += c.contributions;
-        } else {
-          commitsByUser.set(c.login, { ...c });
-        }
-      }
-    }
-
-    let king: ContributorData | null = null;
-    let maxContrib = 0;
-    for (const user of commitsByUser.values()) {
-      if (user.contributions > maxContrib) {
-        maxContrib = user.contributions;
-        king = user;
-      }
-    }
-
-    repos.sort((a, b) => b.totalCommits - a.totalCommits);
-
-    kingdoms.push({
-      language,
-      biome: getBiome(language),
-      repos,
-      king,
-      totalCommits: repos.reduce((s, r) => s + r.totalCommits, 0),
-      totalStars: repos.reduce((s, r) => s + r.repo.stargazers_count, 0),
-    });
-  }
-
-  kingdoms.sort((a, b) => b.totalCommits - a.totalCommits);
-  return kingdoms;
-}
 
 // ─── Load world data (Supabase API → pre-baked JSON fallback) ──
 async function loadWorldData(loadingEl: HTMLElement): Promise<KingdomMetrics[]> {
