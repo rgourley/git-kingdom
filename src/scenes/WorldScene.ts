@@ -848,11 +848,21 @@ export class WorldScene extends Phaser.Scene {
 
     const kingEl = document.getElementById('info-king')!;
     kingEl.innerHTML = k.king
-      ? `👑 Ruler: ${ghLink(k.king.login)} (${k.king.contributions.toLocaleString()} commits)`
+      ? `👑 Ruler: <a href="#" class="ruler-link" style="color:#c8a853;cursor:pointer">${esc(k.king.login)}</a> (${k.king.contributions.toLocaleString()} commits)`
       : 'No ruler';
 
     if ((window as any).__resetPanelPos) (window as any).__resetPanelPos(panel);
     panel.style.display = 'block';
+
+    // Wire up ruler link — enter city and show character sheet
+    const rulerLink = kingEl.querySelector('.ruler-link') as HTMLElement;
+    if (rulerLink && k.king) {
+      const rulerLogin = k.king.login;
+      rulerLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.enterCityWithSheet(k, rulerLogin);
+      });
+    }
 
     // Wire up "Enter City" button
     const enterBtn = document.getElementById('enter-city-btn');
@@ -898,6 +908,33 @@ export class WorldScene extends Phaser.Scene {
         spritePacks: shared.spritePacks,
         highlightUser: shared.highlightUser,
       },
+    });
+  }
+
+  // Enter city and auto-open a character sheet
+  private enterCityWithSheet(k: WorldKingdom, login: string) {
+    const shared = (window as any).__gitworld;
+    if (!shared) return;
+    const kingdom = shared.kingdoms.find((lk: any) => lk.language === k.language);
+    if (!kingdom) return;
+
+    this.hideInfoPanel();
+    document.getElementById('info-stats')!.innerHTML = '';
+    document.getElementById('info-name')!.textContent = '';
+    document.getElementById('info-tier')!.textContent = '';
+    document.getElementById('info-king')!.innerHTML = '';
+    document.getElementById('legend')!.style.display = 'none';
+
+    this.scene.start('CityScene', {
+      kingdom,
+      spritePacks: shared.spritePacks,
+      highlightUser: shared.highlightUser,
+      returnData: {
+        kingdoms: shared.kingdoms,
+        spritePacks: shared.spritePacks,
+        highlightUser: shared.highlightUser,
+      },
+      autoShowSheet: login,
     });
   }
 
