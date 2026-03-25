@@ -12,6 +12,16 @@ import { writeEvent } from '../lib/events';
 const METRICS = ['military_strength', 'wealth', 'population', 'expansion'] as const;
 const BATTLE_DURATION_DAYS = { min: 3, max: 5 };
 
+// Languages that get merged into "Uncharted" — mirrors groupByLanguage.ts
+const LANGUAGE_BLOCKLIST = new Set([
+  'HTML', 'CSS', 'SCSS', 'Less', 'Markdown', 'Dockerfile',
+  'Makefile', 'Nix', 'HCL', 'Vue', 'Blade', 'FreeMarker',
+  'Vim Script', 'LLVM', 'Wren', 'BASIC', 'Batchfile',
+  'PowerShell', 'Nunjucks', 'EJS', 'Handlebars', 'Pug',
+  'Smarty', 'Twig', 'Mustache', 'XSLT', 'Jsonnet',
+]);
+const MIN_REPOS_FOR_KINGDOM = 3;
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.authorization;
@@ -43,9 +53,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const langMetrics = new Map<string, { military_strength: number; wealth: number; population: number; expansion: number }>();
 
+    // First pass: count repos per language to enforce MIN_REPOS_FOR_KINGDOM
+    const langRepoCounts = new Map<string, number>();
     for (const repo of repos) {
-      const lang = repo.language;
-      if (!lang) continue;
+      let lang = repo.language;
+      if (!lang || LANGUAGE_BLOCKLIST.has(lang)) lang = 'Uncharted';
+      langRepoCounts.set(lang, (langRepoCounts.get(lang) ?? 0) + 1);
+    }
+
+    for (const repo of repos) {
+      let lang = repo.language;
+      if (!lang || LANGUAGE_BLOCKLIST.has(lang)) lang = 'Uncharted';
+      // Languages with fewer than MIN_REPOS get merged into Uncharted
+      if (lang !== 'Uncharted' && (langRepoCounts.get(lang) ?? 0) < MIN_REPOS_FOR_KINGDOM) lang = 'Uncharted';
       const m = langMetrics.get(lang) ?? { military_strength: 0, wealth: 0, population: 0, expansion: 0 };
       m.wealth += repo.stargazers ?? 0;
       if (repo.pushed_at && repo.pushed_at >= thirtyDaysAgo) {
