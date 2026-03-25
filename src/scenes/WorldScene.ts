@@ -538,11 +538,11 @@ export class WorldScene extends Phaser.Scene {
     // Live event feed
     initEventFeed((cb) => this.events.on('shutdown', cb));
 
-    // Fetch rankings and add crown to #1 kingdom on the map
+    // Fetch rankings and add crown + battle indicators to the map
     void (async () => {
       try {
         const res = await fetch('/api/rankings');
-        const { rankings } = await res.json();
+        const { rankings, battles } = await res.json();
         const topKingdom = (rankings as { metric: string; rank: number; language: string }[])
           .filter(r => r.metric === 'kingdom_power')
           .sort((a, b) => a.rank - b.rank)[0];
@@ -551,8 +551,6 @@ export class WorldScene extends Phaser.Scene {
           const ki = kingdoms.findIndex(k => k.language === topKingdom.language);
           if (ki !== -1) {
             const container = this.kingdomLabels[ki] as unknown as Phaser.GameObjects.Container;
-            // Position crown just to the right of the banner (banner is ~(nameLabel.width + 20) wide)
-            // We measure via the nameLabel child (index 1 when banner exists, 0 otherwise)
             const nameChild = container.list.find(
               (c): c is Phaser.GameObjects.Text =>
                 c instanceof Phaser.GameObjects.Text && c.y === 0
@@ -565,7 +563,96 @@ export class WorldScene extends Phaser.Scene {
             container.add(crown);
           }
         }
-      } catch { /* silent — crown is optional */ }
+
+        // Add crossed swords to kingdoms in active battles
+        const METRIC_DISPLAY: Record<string, string> = {
+          military_strength: 'Military Strength',
+          wealth: 'Wealth',
+          population: 'Population',
+          expansion: 'Expansion',
+        };
+
+        const activeBattles = (battles as { kingdom_a: string; kingdom_b: string; metric: string; status: string; rounds: { day: number; a_delta: number; b_delta: number }[] }[])
+          .filter(b => b.status === 'active');
+
+        for (const battle of activeBattles) {
+          for (const lang of [battle.kingdom_a, battle.kingdom_b]) {
+            const ki = kingdoms.findIndex(k => k.language === lang);
+            if (ki === -1) continue;
+            const container = this.kingdomLabels[ki] as unknown as Phaser.GameObjects.Container;
+
+            // Add crossed swords below the kingdom label
+            const swords = this.add.text(0, 42, '⚔️', {
+              fontSize: '12px',
+            });
+            swords.setOrigin(0.5, 0);
+            swords.setInteractive({ useHandCursor: true });
+
+            // Hover tooltip with battle info
+            const opponent = lang === battle.kingdom_a ? battle.kingdom_b : battle.kingdom_a;
+            const aTotal = battle.rounds.reduce((s, r) => s + r.a_delta, 0);
+            const bTotal = battle.rounds.reduce((s, r) => s + r.b_delta, 0);
+            const myTotal = lang === battle.kingdom_a ? aTotal : bTotal;
+            const theirTotal = lang === battle.kingdom_a ? bTotal : aTotal;
+            const metricName = METRIC_DISPLAY[battle.metric] ?? battle.metric;
+
+            let tooltip: Phaser.GameObjects.Container | null = null;
+
+            swords.on('pointerover', () => {
+              const tipText = this.add.text(0, 0,
+                `⚔️ At war with ${opponent}\n${metricName} — Day ${battle.rounds.length}\n${lang}: +${myTotal}  vs  ${opponent}: +${theirTotal}\nClick for Rankings`, {
+                fontFamily: "'Silkscreen', monospace",
+                fontSize: '7px',
+                color: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 2,
+                align: 'center',
+                lineSpacing: 4,
+              });
+              tipText.setOrigin(0.5, 1);
+
+              const pad = 6;
+              const bg = this.add.graphics();
+              bg.fillStyle(0x1a1a2e, 0.92);
+              bg.fillRoundedRect(
+                tipText.x - tipText.width / 2 - pad,
+                tipText.y - tipText.height - pad,
+                tipText.width + pad * 2,
+                tipText.height + pad * 2,
+                4
+              );
+              bg.lineStyle(1, 0xc8b89a, 0.6);
+              bg.strokeRoundedRect(
+                tipText.x - tipText.width / 2 - pad,
+                tipText.y - tipText.height - pad,
+                tipText.width + pad * 2,
+                tipText.height + pad * 2,
+                4
+              );
+
+              tooltip = this.add.container(container.x, container.y + 36, [bg, tipText]);
+              tooltip.setDepth(9999);
+            });
+
+            swords.on('pointerout', () => {
+              if (tooltip) { tooltip.destroy(); tooltip = null; }
+            });
+
+            swords.on('pointerdown', () => {
+              if (tooltip) { tooltip.destroy(); tooltip = null; }
+              // Open the leaderboard panel to Battles tab
+              const panel = document.getElementById('leaderboard-panel');
+              if (panel) {
+                panel.style.display = 'block';
+                const battlesTab = panel.querySelector('[data-tab="battles"]') as HTMLElement | null;
+                if (battlesTab) battlesTab.click();
+              }
+            });
+
+            container.add(swords);
+          }
+        }
+      } catch { /* silent — rankings/battles are optional */ }
     })();
 
     // Restore controls hint (now at bottom)
