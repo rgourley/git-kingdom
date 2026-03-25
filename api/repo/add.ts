@@ -9,6 +9,7 @@ import { fetchRepoMetrics, metricsToRepoRow } from '../lib/github-server';
 import { checkMinuteLimit, checkDailyLimit } from '../lib/rate-limit';
 import { getNextToken } from '../lib/github-tokens';
 import { verifyTurnstile } from '../lib/turnstile';
+import { writeEvent } from '../lib/events';
 
 /** Extract owner/repo from a GitHub URL or "owner/repo" string */
 function parseRepoInput(input: string): { owner: string; repo: string } | null {
@@ -124,6 +125,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     console.log(`[add] ${fullName} added (${metrics.repo.language || 'no lang'}, ${metrics.repo.stargazers_count}★)`);
+
+    await writeEvent('repo_added', {
+      repo: `${parsed.owner}/${parsed.repo}`,
+      language: metrics.repo.language,
+      stars: metrics.repo.stargazers_count,
+    });
 
     res.json({
       ok: true,

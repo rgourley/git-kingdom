@@ -7,6 +7,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createServerClient, createServiceClient } from '../lib/supabase';
 import { fetchUserReposAsMetrics, metricsToRepoRow } from '../lib/github-server';
 import { getNextToken } from '../lib/github-tokens';
+import { writeEvent } from '../lib/events';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -106,6 +107,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Log activity for admin visibility
     console.log(`[join] ${login}: added ${addedRepos} repos: ${addedRepoNames.join(', ')}`);
+
+    await writeEvent('citizen_joined', {
+      username: login,
+      repo_count: metrics.length,
+    });
 
     // Count totals for response
     const { count: totalRepos } = await service.from('repos').select('*', { count: 'exact', head: true });
