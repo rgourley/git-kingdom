@@ -263,6 +263,30 @@ export class WorldScene extends Phaser.Scene {
     }
 
     console.log(`[borders] ${borderSegments.length} border segments from ${W}x${H} map`);
+    // Debug: log which kingdoms touch which (adjacency)
+    const adjacency = new Map<string, Set<string>>();
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const k = ownership[y][x];
+        if (k < 0) continue;
+        const kName = kingdoms[k]?.language || String(k);
+        const kr = x + 1 < W ? ownership[y][x + 1] : -1;
+        const kb = y + 1 < H ? ownership[y + 1][x] : -1;
+        if (kr >= 0 && kr !== k) {
+          const krName = kingdoms[kr]?.language || String(kr);
+          if (!adjacency.has(kName)) adjacency.set(kName, new Set());
+          adjacency.get(kName)!.add(krName);
+        }
+        if (kb >= 0 && kb !== k) {
+          const kbName = kingdoms[kb]?.language || String(kb);
+          if (!adjacency.has(kName)) adjacency.set(kName, new Set());
+          adjacency.get(kName)!.add(kbName);
+        }
+      }
+    }
+    for (const [k, neighbors] of adjacency) {
+      console.log(`[borders] ${k} borders: ${Array.from(neighbors).join(', ')}`);
+    }
 
     // Also draw borders where owned land meets unclaimed land between kingdoms
     // This catches the gap between kingdoms that don't directly touch
