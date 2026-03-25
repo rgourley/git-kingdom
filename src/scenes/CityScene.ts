@@ -1169,7 +1169,9 @@ export class CityScene extends Phaser.Scene {
     
     // Ignore WASD and cursor keys if an input element is focused
     const activeEl = document.activeElement;
-    const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+    const isTyping =
+      activeEl instanceof HTMLInputElement ||
+      activeEl instanceof HTMLTextAreaElement;
     
     if (!isTyping) {
       if (this.cursors.left.isDown || this.wasd.A.isDown) cam.scrollX -= speed;
