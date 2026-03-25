@@ -180,9 +180,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const languages = [...new Set(repoList.map(r => r.language).filter(Boolean))] as string[];
     const primaryLanguage = languages[0] || 'Unknown';
 
-    // Only grant king title if user is king of the top-starred repo in their primary language
-    const topRepo = repoList.filter(r => r.language === primaryLanguage).sort((a, b) => b.stargazers - a.stargazers)[0];
-    const isKing = topRepo ? topRepo.king_login?.toLowerCase() === login.toLowerCase() : false;
+    // King title is granted in-game by the CityScene (one per language kingdom).
+    // The API uses contribution-based tiers only — avoids inflating royal titles.
+    const isKing = false;
 
     // 5. Compute RPG elements
     const title = getTitle(totalContributions, isKing);
