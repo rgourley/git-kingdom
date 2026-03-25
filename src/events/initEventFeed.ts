@@ -1,11 +1,20 @@
 import { fetchRecentEvents, EventReplayQueue } from './EventFeed';
 
+let activeQueue: EventReplayQueue | null = null;
+let headerWired = false;
+
 export function initEventFeed(onShutdown: (callback: () => void) => void): void {
+  // Stop any existing queue from a previous scene
+  if (activeQueue) { activeQueue.stop(); activeQueue = null; }
+
   const feedEl = document.getElementById('event-feed');
   const listEl = document.getElementById('event-feed-list');
   const toggleEl = document.getElementById('event-feed-toggle');
   const headerEl = document.getElementById('event-feed-header');
   if (!feedEl || !listEl) return;
+
+  // Clear previous event entries from prior scene
+  listEl.innerHTML = '';
 
   feedEl.style.display = 'block';
 
@@ -16,12 +25,12 @@ export function initEventFeed(onShutdown: (callback: () => void) => void): void 
     if (toggleEl) toggleEl.textContent = '▶';
   }
 
-  headerEl?.addEventListener('click', () => {
+  if (!headerWired && headerEl) { headerWired = true; headerEl.addEventListener('click', () => {
     const isHidden = listEl.style.display === 'none';
     listEl.style.display = isHidden ? 'block' : 'none';
     if (toggleEl) toggleEl.textContent = isHidden ? '▼' : '▶';
     localStorage.setItem('event-feed-collapsed', String(!isHidden));
-  });
+  }); }
 
   fetchRecentEvents().then(events => {
     const queue = new EventReplayQueue((_event, message) => {
@@ -36,8 +45,9 @@ export function initEventFeed(onShutdown: (callback: () => void) => void): void 
         listEl.firstChild?.remove();
       }
     });
+    activeQueue = queue;
     queue.load(events);
 
-    onShutdown(() => queue.stop());
+    onShutdown(() => { queue.stop(); activeQueue = null; });
   });
 }

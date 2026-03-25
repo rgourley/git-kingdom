@@ -36,7 +36,7 @@ export function renderLeaderboardHTML(
         ? `<span style="color:#f87171;">&#9660;${Math.abs(change)}</span>`
         : `<span style="color:#888;">&mdash;</span>`;
       return `
-        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(200,184,154,0.1);">
+        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(200,184,154,0.1);cursor:pointer;" onclick="window.__navigateToKingdom && window.__navigateToKingdom('${r.language}')">
           <span style="color:#c8b89a;">#${r.rank} ${r.language}</span>
           <span>${Math.round(r.value)} ${arrow}</span>
         </div>
