@@ -57,6 +57,7 @@ No new user action needed. Events are written as side effects of existing operat
 
 - `/api/world/join` → writes `citizen_joined` event
 - `/api/repo/add` → writes `repo_added` event
+- Refresh-pushed cron → writes `building_upgraded` event when a repo's star count crosses a building rank threshold (camp → hovel → cottage → guild → manor → keep → palace → castle → citadel)
 - Kingdom wars cron → writes `kingdom_rank_changed`, `battle_started`, `battle_round`, `battle_resolved` events
 
 ### Frontend
