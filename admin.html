@@ -324,9 +324,13 @@
       function formatDate(iso) {
         if (!iso) return '';
         try {
-          var d = new Date(iso);
+          // The date may be truncated (YYYY-MM-DDTHH:MM) — append :00Z if needed
+          var full = iso.length <= 16 ? iso + ':00Z' : iso;
+          var d = new Date(full);
+          if (isNaN(d.getTime())) return iso;
           var now = new Date();
           var diff = now - d;
+          if (diff < 0) diff = 0;
           var mins = Math.floor(diff / 60000);
           if (mins < 60) return mins + 'm ago';
           var hrs = Math.floor(mins / 60);
