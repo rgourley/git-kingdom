@@ -2041,16 +2041,17 @@ const TITLE_TIERS: { min: number; icon: string; names: string[] }[] = [
   { min: 0,    icon: '🧑',  names: ['Peasant', 'Villager', 'Commoner', 'Serf', 'Wanderer', 'Pilgrim', 'Drifter', 'Vagabond'] },
 ];
 
-function citizenTitle(rank: number, _total: number, isKing: boolean, contributions: number): { icon: string; title: string } {
+function citizenTitle(_rank: number, _total: number, isKing: boolean, contributions: number): { icon: string; title: string } {
   if (isKing) {
-    // Top contributor alternates King / Queen using a simple hash of rank
-    return { icon: '👑', title: TITLE_TIERS[0].names[rank % 2] };
+    const royalNames = TITLE_TIERS[0].names;
+    return { icon: '👑', title: royalNames[contributions % royalNames.length] };
   }
   // Skip tier 0 (royalty), match by contribution threshold
+  // Use contributions as hash so title matches the character sheet API
   for (let i = 1; i < TITLE_TIERS.length; i++) {
     const tier = TITLE_TIERS[i];
     if (contributions >= tier.min) {
-      const name = tier.names[rank % tier.names.length];
+      const name = tier.names[contributions % tier.names.length];
       return { icon: tier.icon, title: name };
     }
   }
