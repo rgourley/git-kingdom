@@ -213,7 +213,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           day: dayNum,
           a_delta: aDelta,
           b_delta: bDelta,
-          message: `Day ${dayNum}: ${battle.kingdom_a} ${aDelta > bDelta ? 'pushes forward' : 'falls behind'} (+${aDelta} vs +${bDelta})`,
+          message: dayNum === 1
+            ? `First skirmish! ${battle.kingdom_a} ${aDelta > bDelta ? 'draws first blood' : 'is caught off guard'} (+${aDelta} vs +${bDelta})`
+            : `Round ${dayNum}: ${battle.kingdom_a} ${aDelta > bDelta ? 'pushes forward' : 'falls behind'} (+${aDelta} vs +${bDelta})`,
         });
 
         stats.battles_progressed++;
