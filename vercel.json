@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/refresh-pushed",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/kingdom-wars",
+      "schedule": "0 */6 * * *"
     }
   ],
   "rewrites": [

@@ -4,6 +4,8 @@ import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePack
 import { generateCityInterior, placePublicBuildings } from '../generators/CityGenerator';
 import { expandTemplateVariations } from '../editor/VariationEngine';
 import { trackBuildingClicked, trackCitizenClicked, trackCityExited, trackPageView } from '../analytics';
+import { initEventFeed } from '../events/initEventFeed';
+import { getThought, getFullThought } from '../citizens/ThoughtBubble';
 
 // Stepped zoom levels for crisp pixel-art rendering (retro style)
 const CITY_ZOOM_LEVELS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
@@ -106,6 +108,7 @@ interface WalkingCitizen {
   speed: number;      // pixels per second
   waitTimer: number;  // ms until next move
   login: string;
+  lastCommitMessage?: string;
 }
 
 export class CityScene extends Phaser.Scene {
@@ -136,6 +139,12 @@ export class CityScene extends Phaser.Scene {
   private dismissOnEsc: ((e: KeyboardEvent) => void) | null = null;
   // Track DOM event listeners for cleanup on scene switch
   private domListeners: { el: HTMLElement; event: string; handler: EventListener }[] = [];
+  // Thought bubble state
+  private hoverBubble: Phaser.GameObjects.Container | null = null;
+  private ambientBubbles: Phaser.GameObjects.Container[] = [];
+  private ambientTimer: Phaser.Time.TimerEvent | null = null;
+  // Lookup: login → last_commit_message (built from kingdom data)
+  private commitMessageMap: Map<string, string> = new Map();
 
   constructor() {
     super({ key: 'CityScene' });
@@ -224,6 +233,10 @@ export class CityScene extends Phaser.Scene {
       // Clean up listeners from previous lifecycle
       this.cleanupListeners();
       this.events.once('shutdown', () => this.cleanupListeners());
+      this.events.on('shutdown', () => {
+        this.ambientTimer?.destroy();
+        this.ambientBubbles.forEach(b => b.destroy());
+      });
 
       const data = this.scene.settings.data as {
         kingdom: LanguageKingdom;
@@ -245,6 +258,16 @@ export class CityScene extends Phaser.Scene {
       this.buildingSpriteRefs = [];
       this.templateVariantsByRank = null;
       this.lastZoom = -1;
+
+      // Build commit message lookup from kingdom contributor data
+      this.commitMessageMap = new Map();
+      for (const repo of data.kingdom.repos) {
+        for (const c of repo.contributors) {
+          if (c.last_commit_message && !this.commitMessageMap.has(c.login)) {
+            this.commitMessageMap.set(c.login, c.last_commit_message);
+          }
+        }
+      }
 
       // Generate the city interior
       this.city = generateCityInterior(data.kingdom);
@@ -610,6 +633,9 @@ export class CityScene extends Phaser.Scene {
       this.buildCityLegend(buildings);
       this.addBackButton();
       this.updateControlsHint();
+
+      // Live event feed
+      initEventFeed((cb) => this.events.on('shutdown', cb));
 
       const el = document.getElementById('loading');
       if (el) el.style.display = 'none';
@@ -1166,13 +1192,13 @@ export class CityScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     const cam = this.cameras.main;
     const speed = 4 / cam.zoom;
-    
+
     // Ignore WASD and cursor keys if an input element is focused
     const activeEl = document.activeElement;
     const isTyping =
       activeEl instanceof HTMLInputElement ||
       activeEl instanceof HTMLTextAreaElement;
-    
+
     if (!isTyping) {
       if (this.cursors.left.isDown || this.wasd.A.isDown) cam.scrollX -= speed;
       if (this.cursors.right.isDown || this.wasd.D.isDown) cam.scrollX += speed;
@@ -1331,7 +1357,7 @@ export class CityScene extends Phaser.Scene {
       nameLabel.setDepth(11);
       nameLabel.setVisible(false); // shown on zoom
 
-      this.citizenSprites.push({
+      const walkingCitizen: WalkingCitizen = {
         sprite,
         nameLabel,
         key: spriteKey,
@@ -1340,10 +1366,25 @@ export class CityScene extends Phaser.Scene {
         speed: 18 + rand() * 14,   // pixels per second (slow wander)
         waitTimer: rand() * 4000,   // stagger initial movement
         login: citizen.login,
+        lastCommitMessage: this.commitMessageMap.get(citizen.login),
+      };
+
+      // Hover thought bubble
+      sprite.setInteractive({ useHandCursor: true });
+      sprite.on('pointerover', () => {
+        this.showHoverThought(walkingCitizen, sprite);
       });
+      sprite.on('pointerout', () => {
+        this.hideHoverThought();
+      });
+
+      this.citizenSprites.push(walkingCitizen);
     }
 
     console.log(`Spawned ${this.citizenSprites.length} citizens on ${roadTiles.length} road tiles`);
+
+    // Start ambient thought bubbles
+    this.startAmbientThoughts();
   }
 
   private getSpriteForCitizen(index: number, total: number): string {
@@ -1361,6 +1402,114 @@ export class CityScene extends Phaser.Scene {
     } else {
       return index % 2 === 0 ? 'citizen-old-m' : 'citizen-old-w';
     }
+  }
+
+  private showHoverThought(citizen: WalkingCitizen, sprite: Phaser.GameObjects.Sprite) {
+    this.hideHoverThought();
+    const thought = getThought(citizen.lastCommitMessage, this.city.language, this.city.language);
+
+    const text = this.add.text(0, 0, thought, {
+      fontFamily: 'Silkscreen',
+      fontSize: '8px',
+      color: '#1a1a2e',
+      wordWrap: { width: 150 },
+    }).setOrigin(0.5, 1);
+
+    const padding = 6;
+    const bounds = text.getBounds();
+    const bg = this.add.graphics();
+    bg.fillStyle(0xffffff, 0.95);
+    bg.fillRoundedRect(
+      bounds.x - padding, bounds.y - padding,
+      bounds.width + padding * 2, bounds.height + padding * 2,
+      4
+    );
+    bg.lineStyle(1, 0x1a1a2e, 1);
+    bg.strokeRoundedRect(
+      bounds.x - padding, bounds.y - padding,
+      bounds.width + padding * 2, bounds.height + padding * 2,
+      4
+    );
+
+    this.hoverBubble = this.add.container(sprite.x, sprite.y - 24, [bg, text]);
+    this.hoverBubble.setDepth(9999);
+  }
+
+  private hideHoverThought() {
+    if (this.hoverBubble) {
+      this.hoverBubble.destroy();
+      this.hoverBubble = null;
+    }
+  }
+
+  private startAmbientThoughts() {
+    this.ambientTimer = this.time.addEvent({
+      delay: 7000,
+      callback: () => this.showRandomAmbientThought(),
+      loop: true,
+    });
+  }
+
+  private showRandomAmbientThought() {
+    // Remove excess bubbles
+    while (this.ambientBubbles.length >= 2) {
+      const old = this.ambientBubbles.shift();
+      if (old) {
+        this.tweens.add({
+          targets: old,
+          alpha: 0,
+          duration: 500,
+          onComplete: () => old.destroy(),
+        });
+      }
+    }
+
+    // Pick a random on-screen citizen
+    const cam = this.cameras.main;
+    const visible = this.citizenSprites.filter(c => {
+      const s = c.sprite;
+      return s.x >= cam.scrollX && s.x <= cam.scrollX + cam.width
+        && s.y >= cam.scrollY && s.y <= cam.scrollY + cam.height;
+    });
+
+    if (visible.length === 0) return;
+    const citizen = visible[Math.floor(Math.random() * visible.length)];
+    const thought = getThought(citizen.lastCommitMessage, this.city.language, this.city.language);
+
+    const text = this.add.text(0, 0, thought, {
+      fontFamily: 'Silkscreen',
+      fontSize: '8px',
+      color: '#1a1a2e',
+      wordWrap: { width: 140 },
+    }).setOrigin(0.5, 1);
+
+    const padding = 5;
+    const bounds = text.getBounds();
+    const bg = this.add.graphics();
+    bg.fillStyle(0xffffff, 0.9);
+    bg.fillRoundedRect(bounds.x - padding, bounds.y - padding, bounds.width + padding * 2, bounds.height + padding * 2, 4);
+    bg.lineStyle(1, 0x1a1a2e, 0.8);
+    bg.strokeRoundedRect(bounds.x - padding, bounds.y - padding, bounds.width + padding * 2, bounds.height + padding * 2, 4);
+
+    const container = this.add.container(citizen.sprite.x, citizen.sprite.y - 24, [bg, text]);
+    container.setDepth(9998);
+    container.setAlpha(0);
+
+    this.tweens.add({ targets: container, alpha: 1, duration: 400 });
+
+    this.time.delayedCall(4500, () => {
+      this.tweens.add({
+        targets: container,
+        alpha: 0,
+        duration: 500,
+        onComplete: () => {
+          container.destroy();
+          this.ambientBubbles = this.ambientBubbles.filter(b => b !== container);
+        },
+      });
+    });
+
+    this.ambientBubbles.push(container);
   }
 
   private updateCitizens(delta: number) {
@@ -1480,6 +1629,15 @@ export class CityScene extends Phaser.Scene {
       stat('Contributions', citizen.totalContributions.toLocaleString()),
       `<div class="stat"><span class="stat-label">Repos</span><span class="stat-value">${repoLinks}</span></div>`,
     ];
+
+    // Thought bubble
+    const fullThought = getFullThought(c.lastCommitMessage, this.city.language, this.city.language);
+    stats.push(
+      `<div style="margin-top: 8px; padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: 4px; border-left: 2px solid #c8b89a;">` +
+      `<span style="font-size: 9px; color: #888;">💭 Thoughts</span><br/>` +
+      `<em style="font-size: 10px; color: #c8b89a;">"${esc(fullThought)}"</em>` +
+      `</div>`
+    );
 
     document.getElementById('info-stats')!.innerHTML = stats.join('');
     const kingEl = document.getElementById('info-king')!;
@@ -2194,6 +2352,14 @@ function buildSheetHTML(d: any): string {
     }
     h += `</div>`;
   }
+
+  // Thoughts
+  const sheetThought = getFullThought(d.last_commit_message, d.title?.kingdom || '', d.title?.kingdom || '');
+  h += `<div class="sp-section">`;
+  h += `<div style="margin-top: 8px; padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: 4px; border-left: 2px solid #c8b89a;">`;
+  h += `<span style="font-size: 9px; color: #888;">💭 Thoughts</span><br/>`;
+  h += `<em style="font-size: 10px; color: #c8b89a;">"${esc(sheetThought)}"</em>`;
+  h += `</div></div>`;
 
   // Actions
   const shareUrl = `${window.location.origin}/citizen/${encodeURIComponent(d.login)}`;

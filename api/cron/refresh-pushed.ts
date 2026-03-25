@@ -11,8 +11,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createServiceClient } from '../lib/supabase';
 import { getNextToken } from '../lib/github-tokens';
+import { writeEvent } from '../lib/events';
 
 const GH_API = 'https://api.github.com';
+
+const STAR_RANKS = [
+  { min: 10000, rank: 'citadel' },
+  { min: 5000, rank: 'castle' },
+  { min: 2000, rank: 'palace' },
+  { min: 1000, rank: 'keep' },
+  { min: 500, rank: 'manor' },
+  { min: 100, rank: 'guild' },
+  { min: 20, rank: 'cottage' },
+  { min: 5, rank: 'hovel' },
+  { min: 0, rank: 'camp' },
+];
+
+function getBuildingRank(stars: number): string {
+  return (STAR_RANKS.find(r => stars >= r.min) ?? STAR_RANKS[STAR_RANKS.length - 1]).rank;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Vercel Cron sends Authorization: Bearer <CRON_SECRET>
@@ -39,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get all distinct owners from our repos table
     const { data: repos, error: fetchErr } = await supabase
       .from('repos')
-      .select('full_name, owner_login, pushed_at')
+      .select('full_name, owner_login, pushed_at, stargazers')
       .gte('stargazers', 1);
 
     if (fetchErr || !repos) {
@@ -109,6 +126,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           } else {
             updated++;
             console.log(`[cron] Updated pushed_at for ${fullName}: ${ghDate}`);
+          }
+
+          // Check for building upgrades
+          const ghRepo = ghRepos.find(r => r.full_name?.toLowerCase() === fullName.toLowerCase());
+          if (ghRepo && existing) {
+            const oldStars = existing.stargazers ?? 0;
+            const newStars = ghRepo.stargazers_count ?? 0;
+            const oldRank = getBuildingRank(oldStars);
+            const newRank = getBuildingRank(newStars);
+            if (oldRank !== newRank && newStars > oldStars) {
+              await writeEvent('building_upgraded', {
+                repo: fullName,
+                old_rank: oldRank,
+                new_rank: newRank,
+                stars: newStars,
+                kingdom: ghRepo.language,
+                message: `${fullName} upgraded to ${newRank} with ${newStars} stars!`,
+              });
+            }
+          }
+
+          // Fetch recent commits to populate citizen thoughts
+          const commitsRes = await fetch(
+            `${GH_API}/repos/${fullName}/commits?per_page=10`,
+            { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.v3+json' } }
+          );
+          if (commitsRes.ok) {
+            const commits = await commitsRes.json();
+            const seen = new Set<string>();
+            for (const commit of commits) {
+              const author = commit.author?.login;
+              if (!author || seen.has(author)) continue;
+              seen.add(author);
+              const msg = commit.commit?.message?.split('\n')[0]?.slice(0, 80);
+              if (msg) {
+                await supabase
+                  .from('contributors')
+                  .update({ last_commit_message: msg })
+                  .eq('login', author)
+                  .eq('repo_id', fullName);
+              }
+            }
           }
         }
       } catch (err: unknown) {

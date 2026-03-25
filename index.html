@@ -759,11 +759,15 @@
       background: rgba(255,255,255,0.15);
     }
     #game-header .header-stat .stat-icon {
-      font-size: 9px;
+      font-size: 12px;
       line-height: 1 !important;
-      display: inline-block;
-      width: 12px;
-      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      position: relative;
+      top: -3px;
     }
     #game-header .header-stat span {
       line-height: 1 !important;
@@ -1150,6 +1154,45 @@
       <div id="sheet-content"></div>
     </div>
 
+    <!-- Battle Detail Panel -->
+    <div id="battle-detail-panel" class="rpgui-container framed-golden" style="
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 420px; max-height: 70vh; overflow-y: auto; z-index: 1100; display: none;
+      font-family: 'Silkscreen', monospace; padding: 12px;
+    ">
+      <div id="battle-detail-content"></div>
+    </div>
+
+    <!-- Leaderboard Panel -->
+    <div id="leaderboard-panel" class="rpgui-container framed-golden" style="
+      position: fixed; top: 60px; right: 16px; width: 320px; max-height: 400px;
+      overflow-y: auto; z-index: 1100; display: none;
+      font-family: 'Silkscreen', monospace; padding: 12px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span id="leaderboard-title" style="color:#c8b89a;font-family:'Press Start 2P';font-size:10px;">Kingdom Rankings</span>
+        <span id="leaderboard-close" style="color:#888;cursor:pointer;font-size:12px;">&#10005;</span>
+      </div>
+      <div id="leaderboard-content"></div>
+    </div>
+
+    <!-- Event Feed -->
+    <div id="event-feed" class="rpgui-container framed-golden" style="
+      position: fixed; bottom: 60px; right: 8px; width: 320px; max-height: 180px;
+      overflow: hidden; z-index: 1100; display: none;
+      font-family: 'Silkscreen', monospace; font-size: 8px;
+      padding: 4px 6px !important;
+    ">
+      <div id="event-feed-header" style="
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 2px 4px; cursor: pointer;
+      ">
+        <span style="color: #c8b89a; font-size: 9px;">⚡ World Events</span>
+        <span id="event-feed-toggle" style="color: #c8b89a; font-size: 7px;">▼</span>
+      </div>
+      <div id="event-feed-list" style="padding: 2px 4px; max-height: 130px; overflow-y: auto;"></div>
+    </div>
+
   </div><!-- end rpgui-overlay -->
 
   <!-- Background music (playlist) -->
@@ -1298,6 +1341,35 @@
     document.getElementById('sheet-close').addEventListener('click', function(e) {
       e.stopPropagation();
       document.getElementById('sheet-panel').style.display = 'none';
+    });
+
+    // Leaderboard panel close button
+    document.getElementById('leaderboard-close').addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.getElementById('leaderboard-panel').style.display = 'none';
+    });
+
+    // ─── Close leaderboard panel: Escape key + click outside ───
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        document.getElementById('leaderboard-panel').style.display = 'none';
+        document.getElementById('battle-detail-panel').style.display = 'none';
+      }
+    });
+
+    // Click outside panels to close (don't touch info-panel — game manages that)
+    document.addEventListener('click', function(e) {
+      var target = e.target;
+      var lbPanel = document.getElementById('leaderboard-panel');
+      if (lbPanel && lbPanel.style.display !== 'none' && !lbPanel.contains(target) &&
+          !target.closest('#hdr-rankings') && !target.closest('#hdr-battles')) {
+        lbPanel.style.display = 'none';
+      }
+      var bdPanel = document.getElementById('battle-detail-panel');
+      if (bdPanel && bdPanel.style.display !== 'none' && !bdPanel.contains(target) &&
+          !target.closest('.battle-row') && !target.closest('#leaderboard-panel')) {
+        bdPanel.style.display = 'none';
+      }
     });
 
     // Sign out button
