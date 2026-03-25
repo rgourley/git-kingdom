@@ -1148,6 +1148,22 @@ export class WorldScene extends Phaser.Scene {
         `<a href="#" class="hdr-auth-link" id="hdr-battles" style="display:inline-flex;align-items:center;gap:5px;"><span style="font-size:13px;line-height:0;position:relative;top:-3px;">⚔️</span> Battles</a>` +
         `<span id="hdr-auth"><a href="/api/auth/login" class="hdr-auth-link" id="hdr-signin"><span class="auth-long">Claim your repos</span><span class="auth-short">Claim</span></a></span>`;
 
+      // Navigate to kingdom on map when clicking a ranking row
+      (window as any).__navigateToKingdom = (language: string) => {
+        // Close the leaderboard panel
+        const panel = document.getElementById('leaderboard-panel');
+        if (panel) panel.style.display = 'none';
+
+        // Find the kingdom and center camera on it
+        const ki = kingdoms.findIndex(k => k.language === language);
+        if (ki !== -1) {
+          const container = this.kingdomLabels[ki] as unknown as Phaser.GameObjects.Container;
+          this.cameras.main.pan(container.x, container.y, 500, 'Power2');
+          // Show kingdom info after panning
+          setTimeout(() => this.showKingdomInfo(kingdoms[ki]), 550);
+        }
+      };
+
       // Shared function to open leaderboard panel to a specific tab
       const openLeaderboard = (tab: 'rankings' | 'battles') => {
         const panel = document.getElementById('leaderboard-panel');
