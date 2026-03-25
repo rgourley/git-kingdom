@@ -3,6 +3,7 @@ import { LanguageKingdom, TILES } from '../types';
 import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePacks, GRASS_B_COLS, GRASS_B_FRAMES, GRASS_FLOWERS_COLS, GRASS_FLOWER_FRAMES, TREE_DEFS, GRASS_TREES_COLS, DESERT_B_COLS, DESERT_B_DECO, CAVE_B_COLS, CAVE_B_DECO, createBuildingTextures, getBuildingTextureKey } from '../generators/TilesetGenerator';
 import { generateWorld, WorldData, WorldKingdom, WorldSettlement } from '../generators/WorldGenerator';
 import { trackCityEntered, trackPageView } from '../analytics';
+import { initEventFeed } from '../events/initEventFeed';
 
 // Stepped zoom levels for crisp pixel-art rendering (retro style)
 const WORLD_ZOOM_LEVELS = [0.15, 0.2, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
@@ -533,6 +534,9 @@ export class WorldScene extends Phaser.Scene {
     // ── Populate the RPG header bar for World Map ──
     this.setupWorldHeader(kingdoms);
 
+    // Live event feed
+    initEventFeed((cb) => this.events.on('shutdown', cb));
+
     // Restore controls hint (now at bottom)
     const hint = document.getElementById('controls-hint');
     if (hint) hint.textContent = 'WASD/Arrows: scroll · Mouse wheel: zoom · Click kingdom: inspect';
@@ -771,11 +775,11 @@ export class WorldScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     const cam = this.cameras.main;
     const speed = 4 / cam.zoom;
-    
+
     // Ignore WASD and cursor keys if an input element is focused
     const activeEl = document.activeElement;
     const isTyping = !!activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
-    
+
     if (!isTyping) {
       if (this.cursors.left.isDown || this.wasd.A.isDown) cam.scrollX -= speed;
       if (this.cursors.right.isDown || this.wasd.D.isDown) cam.scrollX += speed;

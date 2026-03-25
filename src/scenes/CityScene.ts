@@ -4,6 +4,7 @@ import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePack
 import { generateCityInterior, placePublicBuildings } from '../generators/CityGenerator';
 import { expandTemplateVariations } from '../editor/VariationEngine';
 import { trackBuildingClicked, trackCitizenClicked, trackCityExited, trackPageView } from '../analytics';
+import { initEventFeed } from '../events/initEventFeed';
 
 // Stepped zoom levels for crisp pixel-art rendering (retro style)
 const CITY_ZOOM_LEVELS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
@@ -611,6 +612,9 @@ export class CityScene extends Phaser.Scene {
       this.addBackButton();
       this.updateControlsHint();
 
+      // Live event feed
+      initEventFeed((cb) => this.events.on('shutdown', cb));
+
       const el = document.getElementById('loading');
       if (el) el.style.display = 'none';
 
@@ -1166,13 +1170,13 @@ export class CityScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     const cam = this.cameras.main;
     const speed = 4 / cam.zoom;
-    
+
     // Ignore WASD and cursor keys if an input element is focused
     const activeEl = document.activeElement;
     const isTyping =
       activeEl instanceof HTMLInputElement ||
       activeEl instanceof HTMLTextAreaElement;
-    
+
     if (!isTyping) {
       if (this.cursors.left.isDown || this.wasd.A.isDown) cam.scrollX -= speed;
       if (this.cursors.right.isDown || this.wasd.D.isDown) cam.scrollX += speed;

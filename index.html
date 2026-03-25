@@ -1150,6 +1150,24 @@
       <div id="sheet-content"></div>
     </div>
 
+    <!-- Event Feed -->
+    <div id="event-feed" style="
+      position: fixed; bottom: 16px; right: 16px; width: 340px; max-height: 200px;
+      overflow: hidden; z-index: 100; display: none;
+      font-family: 'Silkscreen', monospace; font-size: 10px;
+      background: rgba(26, 26, 46, 0.92); border: 1px solid rgba(200, 184, 154, 0.3);
+      border-radius: 4px;
+    ">
+      <div id="event-feed-header" style="
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 4px 8px; cursor: pointer;
+      ">
+        <span style="color: #c8b89a;">World Events</span>
+        <span id="event-feed-toggle" style="color: #c8b89a; font-size: 8px;">▼</span>
+      </div>
+      <div id="event-feed-list" style="padding: 4px 8px;"></div>
+    </div>
+
   </div><!-- end rpgui-overlay -->
 
   <!-- Background music (playlist) -->
