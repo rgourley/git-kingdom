@@ -4,6 +4,7 @@ import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePack
 import { generateWorld, WorldData, WorldKingdom, WorldSettlement } from '../generators/WorldGenerator';
 import { trackCityEntered, trackPageView } from '../analytics';
 import { initEventFeed } from '../events/initEventFeed';
+import { fetchLeaderboardData, renderLeaderboardHTML } from '../wars/LeaderboardPanel';
 
 // Stepped zoom levels for crisp pixel-art rendering (retro style)
 const WORLD_ZOOM_LEVELS = [0.15, 0.2, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
@@ -1005,7 +1006,41 @@ export class WorldScene extends Phaser.Scene {
     const rightEl = header.querySelector('.header-right') as HTMLElement;
     if (rightEl) {
       rightEl.innerHTML =
+        `<a href="#" class="hdr-auth-link" id="hdr-rankings">⚔️ Rankings</a>` +
         `<span id="hdr-auth"><a href="/api/auth/login" class="hdr-auth-link" id="hdr-signin"><span class="auth-long">Claim your repos</span><span class="auth-short">Claim</span></a></span>`;
+
+      // Rankings button — toggle leaderboard panel
+      const rankingsBtn = document.getElementById('hdr-rankings');
+      if (rankingsBtn) {
+        const handler = (e: Event) => {
+          e.preventDefault();
+          const panel = document.getElementById('leaderboard-panel');
+          if (!panel) return;
+          const content = document.getElementById('leaderboard-content');
+          if (panel.style.display === 'none' || !panel.style.display) {
+            panel.style.display = 'block';
+            if (content) content.innerHTML = '<div style="color:#888;font-size:9px;">Loading...</div>';
+            fetchLeaderboardData().then(({ rankings, battles }) => {
+              if (!content) return;
+              let activeTab: 'rankings' | 'battles' = 'rankings';
+              const render = () => {
+                content.innerHTML = renderLeaderboardHTML(rankings, battles, activeTab);
+                content.querySelectorAll('.leaderboard-tab').forEach(tab => {
+                  tab.addEventListener('click', () => {
+                    activeTab = (tab as HTMLElement).dataset.tab as 'rankings' | 'battles';
+                    render();
+                  });
+                });
+              };
+              render();
+            });
+          } else {
+            panel.style.display = 'none';
+          }
+        };
+        rankingsBtn.addEventListener('click', handler);
+        this.domListeners.push({ el: rankingsBtn, event: 'click', handler });
+      }
 
       // Restore auth state if user is already signed in
       const gkUser = (window as any).__gkUser;

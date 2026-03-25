@@ -1150,6 +1150,21 @@
       <div id="sheet-content"></div>
     </div>
 
+    <!-- Leaderboard Panel -->
+    <div id="leaderboard-panel" style="
+      position: fixed; top: 60px; right: 16px; width: 320px; max-height: 400px;
+      overflow-y: auto; z-index: 100; display: none;
+      font-family: 'Silkscreen', monospace; padding: 12px;
+      background: rgba(26, 26, 46, 0.95); border: 1px solid rgba(200, 184, 154, 0.3);
+      border-radius: 4px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="color:#c8b89a;font-family:'Press Start 2P';font-size:10px;">Kingdom Rankings</span>
+        <span id="leaderboard-close" style="color:#888;cursor:pointer;font-size:12px;">&#10005;</span>
+      </div>
+      <div id="leaderboard-content"></div>
+    </div>
+
     <!-- Event Feed -->
     <div id="event-feed" style="
       position: fixed; bottom: 16px; right: 16px; width: 340px; max-height: 200px;
@@ -1316,6 +1331,12 @@
     document.getElementById('sheet-close').addEventListener('click', function(e) {
       e.stopPropagation();
       document.getElementById('sheet-panel').style.display = 'none';
+    });
+
+    // Leaderboard panel close button
+    document.getElementById('leaderboard-close').addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.getElementById('leaderboard-panel').style.display = 'none';
     });
 
     // Sign out button
