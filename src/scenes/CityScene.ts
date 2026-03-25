@@ -521,11 +521,12 @@ export class CityScene extends Phaser.Scene {
       // ── Input ──
       this.cursors = this.input.keyboard!.createCursorKeys();
       this.wasd = {
-        W: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-        A: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-        S: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-        D: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+        W: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.W, false),
+        A: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A, false),
+        S: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S, false),
+        D: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D, false),
       };
+      this.input.keyboard!.removeCapture('UP,DOWN,LEFT,RIGHT,SPACE');
 
       this.input.on('wheel', (_p: any, _g: any, _dx: number, deltaY: number) => {
         this.cameras.main.setZoom(stepCityZoom(deltaY));
@@ -1165,10 +1166,17 @@ export class CityScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     const cam = this.cameras.main;
     const speed = 4 / cam.zoom;
-    if (this.cursors.left.isDown || this.wasd.A.isDown) cam.scrollX -= speed;
-    if (this.cursors.right.isDown || this.wasd.D.isDown) cam.scrollX += speed;
-    if (this.cursors.up.isDown || this.wasd.W.isDown) cam.scrollY -= speed;
-    if (this.cursors.down.isDown || this.wasd.S.isDown) cam.scrollY += speed;
+    
+    // Ignore WASD and cursor keys if an input element is focused
+    const activeEl = document.activeElement;
+    const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+    
+    if (!isTyping) {
+      if (this.cursors.left.isDown || this.wasd.A.isDown) cam.scrollX -= speed;
+      if (this.cursors.right.isDown || this.wasd.D.isDown) cam.scrollX += speed;
+      if (this.cursors.up.isDown || this.wasd.W.isDown) cam.scrollY -= speed;
+      if (this.cursors.down.isDown || this.wasd.S.isDown) cam.scrollY += speed;
+    }
 
     // ── Move citizen NPCs ──
     this.updateCitizens(delta);
