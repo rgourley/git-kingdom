@@ -1641,6 +1641,30 @@ export class CityScene extends Phaser.Scene {
           });
         });
       }
+      // Wire up inventory repo links — click to navigate to the building
+      content.querySelectorAll('.sp-repo-link').forEach((link) => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const repoFullName = (link as HTMLElement).dataset.repo;
+          if (!repoFullName) return;
+          const building = this.city.buildings.find(b =>
+            b.repoMetrics?.repo.full_name.toLowerCase() === repoFullName.toLowerCase()
+          );
+          if (building) {
+            // Close sheet, pan to building, show arrow
+            panel.style.display = 'none';
+            const bx = (building.x + building.width / 2) * TILE_SIZE;
+            const by = (building.y + building.height / 2) * TILE_SIZE;
+            this.cameras.main.pan(bx, by, 500, 'Power2');
+            this.cameras.main.zoomTo(3, 500);
+            this.time.delayedCall(550, () => {
+              this.showPointerArrow(bx, building.y * TILE_SIZE - 12);
+            });
+            this.showBuildingInfo(building);
+          }
+        });
+      });
+
     } catch {
       content.innerHTML = '<div style="text-align:center;padding:32px;color:#8a7a58;font-size:12px">Failed to load character sheet.</div>';
     }
@@ -2147,7 +2171,7 @@ function buildSheetHTML(d: any): string {
     for (const r of shown) {
       h += `<div class="sp-repo">`;
       h += `<span class="sp-repo-icon">${repoIcon(r.stargazers)}</span>`;
-      h += `<span class="sp-repo-name"><a href="https://github.com/${esc(r.full_name)}" target="_blank">${esc(r.full_name)}</a></span>`;
+      h += `<span class="sp-repo-name"><a href="#" class="sp-repo-link" data-repo="${esc(r.full_name)}">${esc(r.full_name)}</a></span>`;
       h += `<span class="sp-repo-meta">`;
       if (r.is_king) h += `<span style="color:#ffd700">👑</span>`;
       h += `<span class="sp-repo-stars">★${fmtNum(r.stargazers)}</span>`;
