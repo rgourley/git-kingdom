@@ -40,7 +40,7 @@ New `world_events` table in Supabase:
 | `payload` | jsonb | Event-specific data (username, repo, kingdom, metric, etc.) |
 | `created_at` | timestamptz | When the event occurred |
 
-Index on `created_at` for efficient range queries.
+Index on `created_at` for efficient range queries. Retention: prune events older than 30 days via the kingdom-wars cron job (add as a final step).
 
 ### API
 
@@ -122,8 +122,9 @@ Citizens with no commit message get a randomized RPG flavor line from a pool:
 - "The realm is peaceful today..."
 - "I serve the {kingdom} kingdom faithfully"
 - "Another day in {city}..."
-- "I hear the {neighboring_kingdom} grows restless..."
-- (10-15 variants, randomly selected per citizen per session)
+- "These are prosperous times..."
+- "I wonder what lies beyond the border..."
+- (10-15 variants using only the citizen's own kingdom name — no cross-kingdom data dependency. Randomly selected per citizen per session)
 
 ---
 
@@ -141,7 +142,7 @@ Kingdoms passively compete across multiple metrics. A leaderboard tracks overall
 | Total stars | Wealth | Sum of stargazer_count for repos of that language |
 | Active citizens (last 30 days) | Population | Count of contributors with recent commits |
 | New repos (last 30 days) | Expansion | Count of repos added in the last 30 days |
-| Weighted blend | Kingdom Power | Combined score (weights TBD during implementation) |
+| Weighted blend | Kingdom Power | 40% Military Strength + 30% Wealth + 20% Population + 10% Expansion (normalized to 0-100 per metric before weighting) |
 
 ### Data Model
 
@@ -190,15 +191,16 @@ Kingdoms passively compete across multiple metrics. A leaderboard tracks overall
 
 **Rules:**
 - Max 1 active battle per kingdom at a time
-- Only neighboring kingdoms can battle (determined by world map border adjacency)
+- Only neighboring kingdoms can battle. Adjacency is derived from the world map's flood-fill ownership grid in `WorldGenerator.ts` — two kingdoms are neighbors if their territory tiles are orthogonally adjacent. At battle-eligibility time, compute a static adjacency list from the current world data (language pairs that share a border). This can be cached and recomputed when the world regenerates.
 - Metric is randomly selected from the 4 individual metrics (not the combined score)
-- ~1-2 new battles generated per week to keep a steady cadence
+- ~1-2 new battles generated per week to keep a steady cadence. If fewer than 3 kingdoms exist or no pairs are within 10%, widen threshold to 25%. If still no eligible pairs, skip battle generation (small worlds are too small for wars).
+- **Ties:** If both kingdoms gain exactly equal amounts, the defender (kingdom_a, the one with higher prior rank in that metric) wins. This avoids anti-climactic "no result" outcomes.
 
 ### Cron Job
 
 Single Vercel cron endpoint: `GET /api/cron/kingdom-wars`
 
-- Runs daily (or every few hours)
+- Runs every 6 hours (4x daily — frequent enough for daily battle rounds, infrequent enough to stay within Vercel cron limits)
 - Step 1: Aggregate metrics from `repos` and `contributors` tables → update `kingdom_rankings`
 - Step 2: Compare new rankings to previous → write `kingdom_rank_changed` events for any shifts
 - Step 3: Update active battles with daily round snapshots → write `battle_round` events
