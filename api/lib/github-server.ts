@@ -23,6 +23,7 @@ interface ContributorData {
   login: string;
   contributions: number;
   avatar_url: string;
+  last_commit_message?: string;
 }
 
 interface KingdomMetrics {
@@ -122,6 +123,27 @@ export async function fetchUserReposAsMetrics(
   return fetchAllRepoMetrics(repoTuples, token, 5);
 }
 
+async function fetchLastCommitMessage(
+  owner: string,
+  repo: string,
+  author: string,
+  token: string
+): Promise<string | undefined> {
+  try {
+    const res = await fetch(
+      `${GH_API}/repos/${owner}/${repo}/commits?author=${author}&per_page=1`,
+      { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.v3+json' } }
+    );
+    if (!res.ok) return undefined;
+    const commits = await res.json();
+    if (commits.length > 0 && commits[0].commit?.message) {
+      const msg = commits[0].commit.message.split('\n')[0]; // first line only
+      return msg.length > 80 ? msg.slice(0, 77) + '...' : msg;
+    }
+  } catch { /* silent */ }
+  return undefined;
+}
+
 /**
  * Fetch full KingdomMetrics for a single repo.
  */
@@ -147,6 +169,13 @@ export async function fetchRepoMetrics(
           avatar_url: c.avatar_url,
         }))
       : [];
+
+    const topContributors = contributors.slice(0, 5);
+    await Promise.all(
+      topContributors.map(async (c) => {
+        c.last_commit_message = await fetchLastCommitMessage(owner, repo, c.login, token);
+      })
+    );
 
     const totalCommits = contributors.reduce((sum, c) => sum + c.contributions, 0);
     const king = contributors.length > 0

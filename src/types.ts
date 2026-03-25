@@ -19,6 +19,7 @@ export interface ContributorData {
   login: string;
   contributions: number;
   avatar_url: string;
+  last_commit_message?: string;
 }
 
 export interface KingdomMetrics {
