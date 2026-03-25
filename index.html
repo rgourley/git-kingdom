@@ -1154,6 +1154,15 @@
       <div id="sheet-content"></div>
     </div>
 
+    <!-- Battle Detail Panel -->
+    <div id="battle-detail-panel" class="rpgui-container framed-golden" style="
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 420px; max-height: 70vh; overflow-y: auto; z-index: 1100; display: none;
+      font-family: 'Silkscreen', monospace; padding: 12px;
+    ">
+      <div id="battle-detail-content"></div>
+    </div>
+
     <!-- Leaderboard Panel -->
     <div id="leaderboard-panel" class="rpgui-container framed-golden" style="
       position: fixed; top: 60px; right: 16px; width: 320px; max-height: 400px;
@@ -1344,16 +1353,22 @@
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         document.getElementById('leaderboard-panel').style.display = 'none';
+        document.getElementById('battle-detail-panel').style.display = 'none';
       }
     });
 
-    // Click outside leaderboard to close (don't touch info-panel — game manages that)
+    // Click outside panels to close (don't touch info-panel — game manages that)
     document.addEventListener('click', function(e) {
       var target = e.target;
-      var panel = document.getElementById('leaderboard-panel');
-      if (panel && panel.style.display !== 'none' && !panel.contains(target) &&
+      var lbPanel = document.getElementById('leaderboard-panel');
+      if (lbPanel && lbPanel.style.display !== 'none' && !lbPanel.contains(target) &&
           !target.closest('#hdr-rankings') && !target.closest('#hdr-battles')) {
-        panel.style.display = 'none';
+        lbPanel.style.display = 'none';
+      }
+      var bdPanel = document.getElementById('battle-detail-panel');
+      if (bdPanel && bdPanel.style.display !== 'none' && !bdPanel.contains(target) &&
+          !target.closest('.battle-row') && !target.closest('#leaderboard-panel')) {
+        bdPanel.style.display = 'none';
       }
     });
 

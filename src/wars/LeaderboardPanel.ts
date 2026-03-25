@@ -102,8 +102,9 @@ export function registerBattleData(battles: KingdomBattle[]): void {
 }
 
 function showBattleDetailModal(b: KingdomBattle): void {
-  const panel = document.getElementById('info-panel');
-  if (!panel) return;
+  const panel = document.getElementById('battle-detail-panel');
+  const content = document.getElementById('battle-detail-content');
+  if (!panel || !content) return;
 
   const aTotal = b.rounds.reduce((s, r) => s + r.a_delta, 0);
   const bTotal = b.rounds.reduce((s, r) => s + r.b_delta, 0);
@@ -132,10 +133,10 @@ function showBattleDetailModal(b: KingdomBattle): void {
     ? `<span style="color:#4ade80;">⚔️ Active</span> — ${daysLeft > 0 ? daysLeft + ' days remaining' : 'Ending soon!'}`
     : `<span style="color:#c8b89a;">🏆 ${b.winner} won!</span>`;
 
-  panel.innerHTML = `
+  content.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <h2 style="font-size:13px;color:#c8b89a;margin:0;">⚔️ Battle: ${b.kingdom_a} vs ${b.kingdom_b}</h2>
-      <span style="color:#888;cursor:pointer;font-size:14px;" onclick="document.getElementById('info-panel').style.display='none'">✕</span>
+      <span style="color:#c8b89a;cursor:pointer;font-size:16px;font-weight:bold;padding:4px 8px;background:rgba(0,0,0,0.3);border-radius:4px;" onclick="document.getElementById('battle-detail-panel').style.display='none'">✕</span>
     </div>
     <div style="font-size:10px;color:#e8d5a3;margin-bottom:8px;">
       Contested: <strong>${metricName}</strong>
