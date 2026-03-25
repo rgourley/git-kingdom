@@ -1950,7 +1950,7 @@ export class CityScene extends Phaser.Scene {
       const style = isUser ? 'color:#ffd700' : '';
       cHtml += `<div class="legend-item legend-citizen" data-login="${esc(c.login)}" style="font-size:9px">` +
         `<span class="legend-name" style="padding-left:4px;${style}">${isUser ? '★ ' : ''}${icon} ${esc(c.login)}</span>` +
-        `<span class="legend-tier">${title} · ${c.totalContributions.toLocaleString()}</span>` +
+        `<span class="legend-tier">${title}</span>` +
         `</div>`;
     }
 
