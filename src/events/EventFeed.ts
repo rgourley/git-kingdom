@@ -11,19 +11,19 @@ export function formatEventMessage(event: WorldEvent): string {
 
   switch (event.event_type) {
     case 'citizen_joined':
-      return `${p.username ?? 'A new citizen'} joined the realm with ${p.repo_count ?? 0} repos`;
+      return `⚔ ${p.username ?? 'A recruit'} pledges allegiance with ${p.repo_count ?? 0} repos`;
     case 'repo_added':
-      return `${p.repo ?? 'A new repo'} was discovered in the ${p.language ?? 'unknown'} kingdom`;
+      return `🏰 ${p.repo ?? 'A new stronghold'} claimed for the ${p.language ?? 'unknown'} kingdom`;
     case 'kingdom_rank_changed':
-      return `${p.kingdom ?? 'A kingdom'} shifted to #${p.new_rank ?? '?'} in Kingdom Power`;
+      return `👑 ${p.kingdom ?? 'A kingdom'} seizes rank #${p.new_rank ?? '?'} in Kingdom Power`;
     case 'battle_started':
-      return `A battle has begun between ${p.kingdom_a ?? '?'} and ${p.kingdom_b ?? '?'}`;
+      return `🔥 War declared! ${p.kingdom_a ?? '?'} marches against ${p.kingdom_b ?? '?'}`;
     case 'battle_round':
-      return `Battle update: ${p.kingdom_a ?? '?'} vs ${p.kingdom_b ?? '?'} — Day ${p.day ?? '?'}`;
+      return `⚔ Siege report: ${p.kingdom_a ?? '?'} vs ${p.kingdom_b ?? '?'} — Round ${p.day ?? '?'}`;
     case 'battle_resolved':
-      return `${p.winner ?? 'A kingdom'} triumphs over ${p.loser ?? 'their rival'}!`;
+      return `🏆 Victory! ${p.winner ?? 'A kingdom'} conquers ${p.loser ?? 'their rival'}!`;
     case 'building_upgraded':
-      return `${p.repo ?? 'A building'} upgraded to ${p.new_rank ?? 'a higher rank'} in ${p.kingdom ?? 'the realm'}!`;
+      return `🏰 ${p.repo ?? 'A fortress'} fortified to ${p.new_rank ?? 'higher rank'} (${p.stars ?? '?'}★)`;
     default:
       return 'Something happened in the realm...';
   }

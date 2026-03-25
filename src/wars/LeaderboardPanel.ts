@@ -23,19 +23,6 @@ export function renderLeaderboardHTML(
   battles: KingdomBattle[],
   activeTab: 'rankings' | 'battles' = 'rankings',
 ): string {
-  const tabs = `
-    <div style="display:flex;gap:8px;margin-bottom:8px;">
-      <button class="leaderboard-tab" data-tab="rankings"
-        style="font-family:'Press Start 2P';font-size:8px;padding:4px 8px;background:${activeTab === 'rankings' ? '#c8b89a' : '#333'};color:${activeTab === 'rankings' ? '#1a1a2e' : '#888'};border:1px solid #555;cursor:pointer;">
-        Rankings
-      </button>
-      <button class="leaderboard-tab" data-tab="battles"
-        style="font-family:'Press Start 2P';font-size:8px;padding:4px 8px;background:${activeTab === 'battles' ? '#c8b89a' : '#333'};color:${activeTab === 'battles' ? '#1a1a2e' : '#888'};border:1px solid #555;cursor:pointer;">
-        Battles
-      </button>
-    </div>
-  `;
-
   if (activeTab === 'rankings') {
     const powerRankings = rankings
       .filter(r => r.metric === 'kingdom_power')
@@ -56,20 +43,21 @@ export function renderLeaderboardHTML(
       `;
     }).join('');
 
-    return tabs + `<div style="color:#a0a0a0;font-size:10px;">${rows || 'No rankings yet'}</div>`;
+    return `<div style="color:#e8d5a3;font-size:10px;">${rows || 'No rankings yet'}</div>`;
   }
 
   // Battles tab
   const activeBattles = battles.filter(b => b.status === 'active');
   const recentResolved = battles.filter(b => b.status === 'resolved').slice(0, 3);
 
-  const battleRows = activeBattles.map(b => {
+  const battleRows = activeBattles.map((b, idx) => {
     const aTotal = b.rounds.reduce((s, r) => s + r.a_delta, 0);
     const bTotal = b.rounds.reduce((s, r) => s + r.b_delta, 0);
     const total = Math.max(1, aTotal + bTotal);
     const aPct = Math.round((aTotal / total) * 100);
+
     return `
-      <div style="margin-bottom:8px;padding:4px;background:rgba(0,0,0,0.2);border-radius:4px;">
+      <div class="battle-row" data-battle="${idx}" style="margin-bottom:8px;padding:4px;background:rgba(0,0,0,0.2);border-radius:4px;cursor:pointer;" onclick="window.__showBattleDetail && window.__showBattleDetail(${idx})">
         <div style="font-size:9px;color:#c8b89a;margin-bottom:4px;">
           &#9876;&#65039; ${b.kingdom_a} vs ${b.kingdom_b} &mdash; ${METRIC_DISPLAY[b.metric] ?? b.metric}
         </div>
@@ -77,25 +65,102 @@ export function renderLeaderboardHTML(
           <div style="width:${aPct}%;background:#4ade80;"></div>
           <div style="width:${100 - aPct}%;background:#f87171;"></div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:8px;color:#888;margin-top:2px;">
+        <div style="display:flex;justify-content:space-between;font-size:8px;color:#e8d5a3;margin-top:2px;">
           <span>${b.kingdom_a}: +${aTotal}</span>
-          <span>Day ${b.rounds.length}</span>
+          <span style="color:#c8b89a;">Day ${b.rounds.length}</span>
           <span>${b.kingdom_b}: +${bTotal}</span>
         </div>
+        <div style="font-size:7px;color:#888;text-align:center;margin-top:2px;">▼ click for details</div>
       </div>
     `;
   }).join('');
 
-  const resolvedRows = recentResolved.map(b => `
-    <div style="font-size:9px;color:#888;padding:2px 0;">
-      &#127942; ${b.winner} defeated ${b.winner === b.kingdom_a ? b.kingdom_b : b.kingdom_a} (${METRIC_DISPLAY[b.metric] ?? b.metric})
-    </div>
-  `).join('');
+  const resolvedRows = recentResolved.map((_b, idx) => {
+    const b = _b;
+    const loser = b.winner === b.kingdom_a ? b.kingdom_b : b.kingdom_a;
+    return `
+      <div style="font-size:9px;color:#c8b89a;padding:3px 0;cursor:pointer;" onclick="window.__showBattleDetail && window.__showBattleDetail(${activeBattles.length + idx})">
+        &#127942; ${b.winner} defeated ${loser} (${METRIC_DISPLAY[b.metric] ?? b.metric})
+      </div>
+    `;
+  }).join('');
 
-  return tabs + `
-    <div style="color:#a0a0a0;font-size:10px;">
-      ${battleRows || '<div style="color:#888;">No active battles</div>'}
-      ${resolvedRows ? `<div style="margin-top:8px;border-top:1px solid rgba(200,184,154,0.1);padding-top:4px;"><div style="font-size:8px;color:#666;margin-bottom:4px;">Recent Results</div>${resolvedRows}</div>` : ''}
+  return `
+    <div style="color:#e8d5a3;font-size:10px;">
+      ${battleRows || '<div style="color:#c8b89a;">No active battles</div>'}
+      ${resolvedRows ? `<div style="margin-top:8px;border-top:1px solid rgba(200,184,154,0.2);padding-top:4px;"><div style="font-size:8px;color:#c8b89a;margin-bottom:4px;">Recent Results</div>${resolvedRows}</div>` : ''}
     </div>
   `;
+}
+
+export function registerBattleData(battles: KingdomBattle[]): void {
+  (window as any).__showBattleDetail = (idx: number) => {
+    const b = battles[idx];
+    if (!b) return;
+    showBattleDetailModal(b);
+  };
+}
+
+function showBattleDetailModal(b: KingdomBattle): void {
+  const panel = document.getElementById('info-panel');
+  if (!panel) return;
+
+  const aTotal = b.rounds.reduce((s, r) => s + r.a_delta, 0);
+  const bTotal = b.rounds.reduce((s, r) => s + r.b_delta, 0);
+  const total = Math.max(1, aTotal + bTotal);
+  const aPct = Math.round((aTotal / total) * 100);
+  const metricName = METRIC_DISPLAY[b.metric] ?? b.metric;
+  const isActive = b.status === 'active';
+  const daysLeft = Math.max(0, Math.ceil((new Date(b.ends_at).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+
+  const roundRows = b.rounds.map(r => {
+    const rTotal = Math.max(1, r.a_delta + r.b_delta);
+    const rPct = Math.round((r.a_delta / rTotal) * 100);
+    return `
+      <div style="display:flex;align-items:center;gap:6px;margin:6px 0;">
+        <span style="color:#c8b89a;min-width:40px;font-size:10px;white-space:nowrap;">Day ${r.day}</span>
+        <div style="flex:1;display:flex;height:10px;border-radius:3px;overflow:hidden;background:#222;min-width:60px;">
+          <div style="width:${rPct}%;background:#4ade80;"></div>
+          <div style="width:${100 - rPct}%;background:#f87171;"></div>
+        </div>
+        <span style="color:#e8d5a3;min-width:70px;text-align:right;font-size:9px;white-space:nowrap;">+${r.a_delta} / +${r.b_delta}</span>
+      </div>
+    `;
+  }).join('');
+
+  const statusLine = isActive
+    ? `<span style="color:#4ade80;">⚔️ Active</span> — ${daysLeft > 0 ? daysLeft + ' days remaining' : 'Ending soon!'}`
+    : `<span style="color:#c8b89a;">🏆 ${b.winner} won!</span>`;
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h2 style="font-size:13px;color:#c8b89a;margin:0;">⚔️ Battle: ${b.kingdom_a} vs ${b.kingdom_b}</h2>
+      <span style="color:#888;cursor:pointer;font-size:14px;" onclick="document.getElementById('info-panel').style.display='none'">✕</span>
+    </div>
+    <div style="font-size:10px;color:#e8d5a3;margin-bottom:8px;">
+      Contested: <strong>${metricName}</strong>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#e8d5a3;margin-bottom:4px;">
+        <span>${b.kingdom_a}: +${aTotal}</span>
+        <span>${b.kingdom_b}: +${bTotal}</span>
+      </div>
+      <div style="display:flex;height:14px;border-radius:4px;overflow:hidden;background:#222;">
+        <div style="width:${aPct}%;background:#4ade80;"></div>
+        <div style="width:${100 - aPct}%;background:#f87171;"></div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:#c8b89a;margin-bottom:6px;border-bottom:1px solid rgba(200,184,154,0.2);padding-bottom:4px;">
+      Round-by-Round
+    </div>
+    ${roundRows}
+    <div style="margin-top:12px;padding-top:8px;border-top:1px solid rgba(200,184,154,0.2);font-size:9px;color:#e8d5a3;">
+      <div style="margin-bottom:4px;">${statusLine}</div>
+      <div style="color:#888;">
+        ${new Date(b.started_at).toLocaleDateString()} — ${new Date(b.ends_at).toLocaleDateString()}
+      </div>
+    </div>
+  `;
+
+  panel.style.display = 'block';
 }

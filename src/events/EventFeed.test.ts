@@ -8,7 +8,7 @@ describe('formatEventMessage', () => {
       payload: { username: 'alice', repo_count: 5 },
     });
     expect(msg).toContain('alice');
-    expect(msg).toContain('joined');
+    expect(msg).toContain('allegiance');
   });
 
   it('formats battle_started events using payload message', () => {

@@ -27,7 +27,7 @@ export function initEventFeed(onShutdown: (callback: () => void) => void): void 
     const queue = new EventReplayQueue((_event, message) => {
       const div = document.createElement('div');
       div.textContent = message;
-      div.style.cssText = 'color: #a0a0a0; padding: 2px 0; opacity: 0; transition: opacity 0.5s;';
+      div.style.cssText = 'color: #e8e0d0; padding: 2px 0; opacity: 0; transition: opacity 0.5s; font-size: 9px; line-height: 1.4; border-bottom: 1px solid rgba(200,184,154,0.15); margin-bottom: 2px;';
       listEl.appendChild(div);
       requestAnimationFrame(() => { div.style.opacity = '1'; });
 

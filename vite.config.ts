@@ -1,6 +1,7 @@
 import { defineConfig, Plugin } from 'vite';
 import { resolve } from 'path';
 import { writeFileSync, readFileSync } from 'fs';
+import { createClient } from '@supabase/supabase-js';
 
 /**
  * Vite dev-server plugin that exposes a POST /api/save-templates endpoint.
@@ -75,13 +76,47 @@ export default defineConfig({
         });
       },
     },
-    // Intercept /api/* requests in dev so Vite doesn't try to transform serverless .ts files
+    // Dev API handlers for events and rankings (query Supabase directly)
+    {
+      name: 'dev-api',
+      configureServer(server) {
+        const getSupabase = () => {
+          const url = process.env.SUPABASE_URL;
+          const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          if (!url || !key) return null;
+          return createClient(url, key);
+        };
+
+        server.middlewares.use('/api/events', async (_req, res) => {
+          const sb = getSupabase();
+          if (!sb) { res.statusCode = 500; res.end('{}'); return; }
+          const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+          const { data } = await sb.from('world_events')
+            .select('id, event_type, payload, created_at')
+            .gte('created_at', since)
+            .order('created_at', { ascending: true })
+            .limit(50);
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(data ?? []));
+        });
+
+        server.middlewares.use('/api/rankings', async (_req, res) => {
+          const sb = getSupabase();
+          if (!sb) { res.statusCode = 500; res.end('{}'); return; }
+          const [r, b] = await Promise.all([
+            sb.from('kingdom_rankings').select('*').order('rank', { ascending: true }),
+            sb.from('kingdom_battles').select('*').order('started_at', { ascending: false }).limit(10),
+          ]);
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ rankings: r.data ?? [], battles: b.data ?? [] }));
+        });
+      },
+    },
+    // Intercept remaining /api/* requests in dev so Vite doesn't try to transform serverless .ts files
     {
       name: 'mock-api',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
-          // If it's an /api/ request (not /api/save-templates which is handled above),
-          // return a 404 JSON instead of letting Vite try to serve api/*.ts as modules
           if (req.url?.startsWith('/api/') && !req.url.startsWith('/api/save-templates') && !req.url.startsWith('/api/citizen')) {
             res.statusCode = 404;
             res.setHeader('Content-Type', 'application/json');

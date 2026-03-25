@@ -4,7 +4,7 @@ import { generateTileset, TILE_SIZE, TILESET_MARGIN, TILESET_SPACING, SpritePack
 import { generateWorld, WorldData, WorldKingdom, WorldSettlement } from '../generators/WorldGenerator';
 import { trackCityEntered, trackPageView } from '../analytics';
 import { initEventFeed } from '../events/initEventFeed';
-import { fetchLeaderboardData, renderLeaderboardHTML } from '../wars/LeaderboardPanel';
+import { fetchLeaderboardData, renderLeaderboardHTML, registerBattleData } from '../wars/LeaderboardPanel';
 
 // Stepped zoom levels for crisp pixel-art rendering (retro style)
 const WORLD_ZOOM_LEVELS = [0.15, 0.2, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
@@ -63,6 +63,7 @@ export class WorldScene extends Phaser.Scene {
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
   // Scale-aware labels: stored so update() can adjust their scale with zoom
   private kingdomLabels: Phaser.GameObjects.Text[] = [];
+  private battleIcons: { icon: Phaser.GameObjects.Text; container: Phaser.GameObjects.Container }[] = [];
   private lastZoom = -1;
   // Glow rings for highlighted (user's) settlements
   private glowRings: Phaser.GameObjects.Arc[] = [];
@@ -542,7 +543,10 @@ export class WorldScene extends Phaser.Scene {
     void (async () => {
       try {
         const res = await fetch('/api/rankings');
+        if (!res.ok) { console.warn('[WorldScene] /api/rankings failed:', res.status); return; }
         const { rankings, battles } = await res.json();
+        console.log('[WorldScene] rankings:', rankings?.length, 'battles:', battles?.length, 'active:', battles?.filter((b: any) => b.status === 'active')?.length);
+        console.log('[WorldScene] kingdoms on map:', kingdoms.map((k: any) => k.language));
         const topKingdom = (rankings as { metric: string; rank: number; language: string }[])
           .filter(r => r.metric === 'kingdom_power')
           .sort((a, b) => a.rank - b.rank)[0];
@@ -575,18 +579,29 @@ export class WorldScene extends Phaser.Scene {
         const activeBattles = (battles as { kingdom_a: string; kingdom_b: string; metric: string; status: string; rounds: { day: number; a_delta: number; b_delta: number }[] }[])
           .filter(b => b.status === 'active');
 
+        console.log('[WorldScene] active battles:', activeBattles.length, activeBattles.map((b: any) => `${b.kingdom_a} vs ${b.kingdom_b}`));
         for (const battle of activeBattles) {
           for (const lang of [battle.kingdom_a, battle.kingdom_b]) {
             const ki = kingdoms.findIndex(k => k.language === lang);
+            console.log(`[WorldScene] battle swords: looking for "${lang}" in kingdoms, found index: ${ki}`);
             if (ki === -1) continue;
             const container = this.kingdomLabels[ki] as unknown as Phaser.GameObjects.Container;
 
-            // Add crossed swords below the kingdom label
-            const swords = this.add.text(0, 42, '⚔️', {
-              fontSize: '12px',
+            // Add crossed swords as independent scene object (not child of container)
+            // so it can scale separately and stay large/visible at all zoom levels
+            const swords = this.add.text(container.x, container.y - 30, '⚔️', {
+              fontSize: '28px',
             });
-            swords.setOrigin(0.5, 0);
+            swords.setOrigin(0.5, 1);
+            swords.setDepth(13);
+            // Set initial scale to match current zoom
+            const initScale = 1 / this.cameras.main.zoom;
+            swords.setScale(initScale);
+            swords.setPosition(container.x, container.y - 30 * container.scale);
             swords.setInteractive({ useHandCursor: true });
+
+            // Track for independent scaling in update()
+            this.battleIcons.push({ icon: swords, container });
 
             // Hover tooltip with battle info
             const opponent = lang === battle.kingdom_a ? battle.kingdom_b : battle.kingdom_a;
@@ -602,18 +617,18 @@ export class WorldScene extends Phaser.Scene {
               const tipText = this.add.text(0, 0,
                 `⚔️ At war with ${opponent}\n${metricName} — Day ${battle.rounds.length}\n${lang}: +${myTotal}  vs  ${opponent}: +${theirTotal}\nClick for Rankings`, {
                 fontFamily: "'Silkscreen', monospace",
-                fontSize: '7px',
+                fontSize: '12px',
                 color: '#ffffff',
                 stroke: '#000000',
-                strokeThickness: 2,
+                strokeThickness: 3,
                 align: 'center',
-                lineSpacing: 4,
+                lineSpacing: 6,
               });
               tipText.setOrigin(0.5, 1);
 
-              const pad = 6;
+              const pad = 10;
               const bg = this.add.graphics();
-              bg.fillStyle(0x1a1a2e, 0.92);
+              bg.fillStyle(0x1a1a2e, 0.95);
               bg.fillRoundedRect(
                 tipText.x - tipText.width / 2 - pad,
                 tipText.y - tipText.height - pad,
@@ -630,8 +645,10 @@ export class WorldScene extends Phaser.Scene {
                 4
               );
 
-              tooltip = this.add.container(container.x, container.y + 36, [bg, tipText]);
+              const ttScale = 1 / this.cameras.main.zoom;
+              tooltip = this.add.container(swords.x, swords.y - 10 * ttScale, [bg, tipText]);
               tooltip.setDepth(9999);
+              tooltip.setScale(ttScale);
             });
 
             swords.on('pointerout', () => {
@@ -640,7 +657,6 @@ export class WorldScene extends Phaser.Scene {
 
             swords.on('pointerdown', () => {
               if (tooltip) { tooltip.destroy(); tooltip = null; }
-              // Open the leaderboard panel to Battles tab
               const panel = document.getElementById('leaderboard-panel');
               if (panel) {
                 panel.style.display = 'block';
@@ -648,8 +664,6 @@ export class WorldScene extends Phaser.Scene {
                 if (battlesTab) battlesTab.click();
               }
             });
-
-            container.add(swords);
           }
         }
       } catch { /* silent — rankings/battles are optional */ }
@@ -924,6 +938,13 @@ export class WorldScene extends Phaser.Scene {
       for (const label of this.kingdomLabels) {
         label.setScale(effectiveScale);
       }
+
+      // Battle icons: always stay the same screen size regardless of zoom
+      const iconScale = 1 / zoom;
+      for (const { icon, container } of this.battleIcons) {
+        icon.setScale(iconScale);
+        icon.setPosition(container.x, container.y - 30 * effectiveScale);
+      }
     }
   }
 
@@ -1123,40 +1144,58 @@ export class WorldScene extends Phaser.Scene {
     const rightEl = header.querySelector('.header-right') as HTMLElement;
     if (rightEl) {
       rightEl.innerHTML =
-        `<a href="#" class="hdr-auth-link" id="hdr-rankings">⚔️ Rankings</a>` +
+        `<a href="#" class="hdr-auth-link" id="hdr-rankings" style="display:inline-flex;align-items:center;gap:5px;"><span style="font-size:13px;line-height:0;position:relative;top:-3px;">👑</span> Rankings</a>` +
+        `<a href="#" class="hdr-auth-link" id="hdr-battles" style="display:inline-flex;align-items:center;gap:5px;"><span style="font-size:13px;line-height:0;position:relative;top:-3px;">⚔️</span> Battles</a>` +
         `<span id="hdr-auth"><a href="/api/auth/login" class="hdr-auth-link" id="hdr-signin"><span class="auth-long">Claim your repos</span><span class="auth-short">Claim</span></a></span>`;
 
-      // Rankings button — toggle leaderboard panel
+      // Shared function to open leaderboard panel to a specific tab
+      const openLeaderboard = (tab: 'rankings' | 'battles') => {
+        const panel = document.getElementById('leaderboard-panel');
+        if (!panel) return;
+        const content = document.getElementById('leaderboard-content');
+        const titleEl = panel.querySelector('#leaderboard-title') as HTMLElement | null;
+
+        panel.style.display = 'block';
+        if (titleEl) titleEl.textContent = tab === 'rankings' ? '👑 Kingdom Rankings' : '⚔️ Kingdom Battles';
+        if (content) content.innerHTML = '<div style="color:#888;font-size:9px;">Loading...</div>';
+        fetchLeaderboardData().then(({ rankings, battles }) => {
+          if (!content) return;
+          const allBattles = [...battles.filter(b => b.status === 'active'), ...battles.filter(b => b.status === 'resolved')];
+          registerBattleData(allBattles);
+          content.innerHTML = renderLeaderboardHTML(rankings, battles, tab);
+        });
+      };
+
+      // Rankings button
       const rankingsBtn = document.getElementById('hdr-rankings');
       if (rankingsBtn) {
         const handler = (e: Event) => {
           e.preventDefault();
           const panel = document.getElementById('leaderboard-panel');
-          if (!panel) return;
-          const content = document.getElementById('leaderboard-content');
-          if (panel.style.display === 'none' || !panel.style.display) {
-            panel.style.display = 'block';
-            if (content) content.innerHTML = '<div style="color:#888;font-size:9px;">Loading...</div>';
-            fetchLeaderboardData().then(({ rankings, battles }) => {
-              if (!content) return;
-              let activeTab: 'rankings' | 'battles' = 'rankings';
-              const render = () => {
-                content.innerHTML = renderLeaderboardHTML(rankings, battles, activeTab);
-                content.querySelectorAll('.leaderboard-tab').forEach(tab => {
-                  tab.addEventListener('click', () => {
-                    activeTab = (tab as HTMLElement).dataset.tab as 'rankings' | 'battles';
-                    render();
-                  });
-                });
-              };
-              render();
-            });
-          } else {
+          if (panel && panel.style.display === 'block' && panel.querySelector('#leaderboard-title')?.textContent?.includes('Rankings')) {
             panel.style.display = 'none';
+          } else {
+            openLeaderboard('rankings');
           }
         };
         rankingsBtn.addEventListener('click', handler);
         this.domListeners.push({ el: rankingsBtn, event: 'click', handler });
+      }
+
+      // Battles button
+      const battlesBtn = document.getElementById('hdr-battles');
+      if (battlesBtn) {
+        const handler = (e: Event) => {
+          e.preventDefault();
+          const panel = document.getElementById('leaderboard-panel');
+          if (panel && panel.style.display === 'block' && panel.querySelector('#leaderboard-title')?.textContent?.includes('Battles')) {
+            panel.style.display = 'none';
+          } else {
+            openLeaderboard('battles');
+          }
+        };
+        battlesBtn.addEventListener('click', handler);
+        this.domListeners.push({ el: battlesBtn, event: 'click', handler });
       }
 
       // Restore auth state if user is already signed in

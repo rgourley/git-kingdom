@@ -759,11 +759,15 @@
       background: rgba(255,255,255,0.15);
     }
     #game-header .header-stat .stat-icon {
-      font-size: 9px;
+      font-size: 12px;
       line-height: 1 !important;
-      display: inline-block;
-      width: 12px;
-      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      position: relative;
+      top: -3px;
     }
     #game-header .header-stat span {
       line-height: 1 !important;
@@ -1157,7 +1161,7 @@
       font-family: 'Silkscreen', monospace; padding: 12px;
     ">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <span style="color:#c8b89a;font-family:'Press Start 2P';font-size:10px;">Kingdom Rankings</span>
+        <span id="leaderboard-title" style="color:#c8b89a;font-family:'Press Start 2P';font-size:10px;">Kingdom Rankings</span>
         <span id="leaderboard-close" style="color:#888;cursor:pointer;font-size:12px;">&#10005;</span>
       </div>
       <div id="leaderboard-content"></div>
@@ -1165,18 +1169,19 @@
 
     <!-- Event Feed -->
     <div id="event-feed" class="rpgui-container framed-golden" style="
-      position: fixed; bottom: 60px; right: 16px; width: 340px; max-height: 200px;
+      position: fixed; bottom: 60px; right: 8px; width: 320px; max-height: 180px;
       overflow: hidden; z-index: 1100; display: none;
-      font-family: 'Silkscreen', monospace; font-size: 10px;
+      font-family: 'Silkscreen', monospace; font-size: 8px;
+      padding: 4px 6px !important;
     ">
       <div id="event-feed-header" style="
         display: flex; justify-content: space-between; align-items: center;
-        padding: 4px 8px; cursor: pointer;
+        padding: 2px 4px; cursor: pointer;
       ">
-        <span style="color: #c8b89a;">World Events</span>
-        <span id="event-feed-toggle" style="color: #c8b89a; font-size: 8px;">▼</span>
+        <span style="color: #c8b89a; font-size: 9px;">⚡ World Events</span>
+        <span id="event-feed-toggle" style="color: #c8b89a; font-size: 7px;">▼</span>
       </div>
-      <div id="event-feed-list" style="padding: 4px 8px;"></div>
+      <div id="event-feed-list" style="padding: 2px 4px; max-height: 130px; overflow-y: auto;"></div>
     </div>
 
   </div><!-- end rpgui-overlay -->
@@ -1333,6 +1338,23 @@
     document.getElementById('leaderboard-close').addEventListener('click', function(e) {
       e.stopPropagation();
       document.getElementById('leaderboard-panel').style.display = 'none';
+    });
+
+    // ─── Close leaderboard panel: Escape key + click outside ───
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        document.getElementById('leaderboard-panel').style.display = 'none';
+      }
+    });
+
+    // Click outside leaderboard to close (don't touch info-panel — game manages that)
+    document.addEventListener('click', function(e) {
+      var target = e.target;
+      var panel = document.getElementById('leaderboard-panel');
+      if (panel && panel.style.display !== 'none' && !panel.contains(target) &&
+          !target.closest('#hdr-rankings') && !target.closest('#hdr-battles')) {
+        panel.style.display = 'none';
+      }
     });
 
     // Sign out button
