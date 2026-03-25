@@ -9,19 +9,22 @@ import { createServiceClient } from './lib/supabase';
 
 // ─── Title system (mirrored from CityScene.ts) ─────────────────
 const TITLE_TIERS: { min: number; icon: string; names: string[] }[] = [
-  { min: 0,    icon: '👑', names: ['Sovereign', 'Monarch'] },
-  { min: 5000, icon: '🏰', names: ['Archduke', 'Regent', 'High Chancellor', 'Grand Protector', 'Viceroy'] },
-  { min: 3000, icon: '🏰', names: ['Marquess', 'Palatine', 'Viceroy', 'Warden', 'Grand Steward'] },
-  { min: 1500, icon: '⚜',  names: ['Earl', 'Viscount', 'Jarl', 'Overlord', 'Castellan', 'Protector'] },
-  { min: 750,  icon: '🛡',  names: ['Thane', 'Castellan', 'Liege', 'Banneret', 'Steward', 'Keeper'] },
-  { min: 300,  icon: '⚔',  names: ['Knight', 'Paladin', 'Templar', 'Sentinel', 'Champion', 'Crusader'] },
-  { min: 100,  icon: '🗡',  names: ['Squire', 'Esquire', 'Herald', 'Reeve', 'Magistrate', 'Bailiff'] },
-  { min: 25,   icon: '🔨',  names: ['Artisan', 'Scribe', 'Mason', 'Smith', 'Alchemist', 'Tinkerer'] },
-  { min: 0,    icon: '🧑',  names: ['Peasant', 'Villager', 'Commoner', 'Wanderer', 'Pilgrim', 'Drifter'] },
+  { min: 0,    icon: '👑', names: ['Sovereign', 'Monarch', 'Liege Lord', 'High King', 'Overlord', 'Supreme Ruler'] },
+  { min: 5000, icon: '🏰', names: ['Archduke', 'Regent', 'High Chancellor', 'Grand Protector', 'Viceroy', 'Grand Marshal', 'Lord Commander', 'Royal Steward'] },
+  { min: 3000, icon: '🏰', names: ['Marquess', 'Palatine', 'Viceroy', 'Warden', 'Grand Steward', 'Emissary'] },
+  { min: 1500, icon: '⚜',  names: ['Earl', 'Viscount', 'Jarl', 'Overlord', 'Warden', 'Castellan', 'Protector'] },
+  { min: 750,  icon: '🛡',  names: ['Thane', 'Castellan', 'Liege', 'Banneret', 'Steward', 'Keeper', 'Seneschal'] },
+  { min: 300,  icon: '⚔',  names: ['Knight', 'Paladin', 'Templar', 'Sentinel', 'Champion', 'Crusader', 'Defender', 'Guardian'] },
+  { min: 100,  icon: '🗡',  names: ['Squire', 'Esquire', 'Herald', 'Reeve', 'Magistrate', 'Bailiff', 'Alderman', 'Yeoman'] },
+  { min: 25,   icon: '🔨',  names: ['Artisan', 'Scribe', 'Mason', 'Smith', 'Alchemist', 'Herbalist', 'Tinkerer', 'Sage'] },
+  { min: 0,    icon: '🧑',  names: ['Peasant', 'Villager', 'Commoner', 'Serf', 'Wanderer', 'Pilgrim', 'Drifter', 'Vagabond'] },
 ];
 
 function getTitle(contributions: number, isKing: boolean): { icon: string; name: string } {
-  if (isKing) return { icon: '👑', name: TITLE_TIERS[0].names[0] };
+  if (isKing) {
+    const royalNames = TITLE_TIERS[0].names;
+    return { icon: '👑', name: royalNames[contributions % royalNames.length] };
+  }
   for (let i = 1; i < TITLE_TIERS.length; i++) {
     if (contributions >= TITLE_TIERS[i].min) {
       const tier = TITLE_TIERS[i];

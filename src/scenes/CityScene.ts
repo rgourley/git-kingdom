@@ -2031,7 +2031,7 @@ export class CityScene extends Phaser.Scene {
  */
 const TITLE_TIERS: { min: number; icon: string; names: string[] }[] = [
   { min: 0,    icon: '👑', names: ['Sovereign', 'Monarch'] },  // only isKing gets this
-  { min: 5000, icon: '🏰', names: ['Archduke', 'Regent', 'High Chancellor', 'Sovereign', 'Grand Protector', 'Viceroy'] },
+  { min: 5000, icon: '🏰', names: ['Archduke', 'Regent', 'High Chancellor', 'Grand Protector', 'Viceroy', 'Grand Marshal', 'Lord Commander', 'Royal Steward'] },
   { min: 3000, icon: '🏰', names: ['Marquess', 'Palatine', 'Viceroy', 'Warden', 'Grand Steward', 'Emissary'] },
   { min: 1500, icon: '⚜',  names: ['Earl', 'Viscount', 'Jarl', 'Overlord', 'Warden', 'Castellan', 'Protector'] },
   { min: 750,  icon: '🛡',  names: ['Thane', 'Castellan', 'Liege', 'Banneret', 'Steward', 'Keeper', 'Seneschal'] },
