@@ -128,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 1. Find all repos this user contributes to
     const { data: contribs, error: contribErr } = await supabase
       .from('contributors')
-      .select('repo_id, login, avatar_url, contributions')
+      .select('repo_id, login, avatar_url, contributions, last_commit_message')
       .ilike('login', username);
 
     if (contribErr) {
@@ -175,6 +175,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 4. Compute aggregates
     const login = contribs[0].login; // use exact casing from DB
     const avatar_url = contribs[0].avatar_url;
+    // Use the last_commit_message from the highest-contribution row (already sorted by contributions desc via repoList)
+    const last_commit_message = contribs.find(c => c.last_commit_message)?.last_commit_message ?? null;
     const totalContributions = repoList.reduce((s, r) => s + r.contributions, 0);
     const totalStars = repoList.reduce((s, r) => s + r.stargazers, 0);
     const languages = [...new Set(repoList.map(r => r.language).filter(Boolean))] as string[];
@@ -201,6 +203,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.json({
       login,
       avatar_url,
+      last_commit_message,
       totalContributions,
       level,
       xp,
