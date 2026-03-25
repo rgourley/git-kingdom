@@ -95,9 +95,6 @@ function groupByLanguage(allMetrics: KingdomMetrics[]): LanguageKingdom[] {
     groups.delete(language);
   }
 
-  // Debug: log all language groups and their sizes
-  console.log('[groupByLanguage] Final groups:', Array.from(groups.entries()).map(([l, r]) => `${l}(${r.length})`).join(', '));
-
   const kingdoms: LanguageKingdom[] = [];
   for (const [language, repos] of groups) {
     const commitsByUser = new Map<string, { login: string; contributions: number; avatar_url: string }>();

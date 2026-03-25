@@ -46,17 +46,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // 2. Per-minute rate limit (5 req/min per IP)
-  const minuteLimit = await checkMinuteLimit(ip);
+  // 2. Per-minute rate limit (5 req/min per IP) and daily cap (20 repos/day per IP) — checked in parallel
+  const [minuteLimit, dailyLimit] = await Promise.all([
+    checkMinuteLimit(ip),
+    checkDailyLimit(ip),
+  ]);
   if (minuteLimit.limited) {
     return res.status(429).json({
       error: 'Too many requests. Try again in a minute.',
       retryAfter: Math.ceil(minuteLimit.resetInMs / 1000),
     });
   }
-
-  // 3. Daily cap (20 repos/day per IP)
-  const dailyLimit = await checkDailyLimit(ip);
   if (dailyLimit.limited) {
     return res.status(429).json({
       error: 'Daily limit reached. Come back tomorrow!',

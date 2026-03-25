@@ -133,6 +133,7 @@ export class CityScene extends Phaser.Scene {
   // Bouncing pointer arrow for highlighting buildings
   private pointerArrow: Phaser.GameObjects.Container | null = null;
   private pointerArrowTween: Phaser.Tweens.Tween | null = null;
+  private dismissOnEsc: ((e: KeyboardEvent) => void) | null = null;
   // Track DOM event listeners for cleanup on scene switch
   private domListeners: { el: HTMLElement; event: string; handler: EventListener }[] = [];
 
@@ -184,16 +185,23 @@ export class CityScene extends Phaser.Scene {
     const dismissOnClick = () => {
       this.hidePointerArrow();
       this.input.off('pointerdown', dismissOnClick);
+      if (this.dismissOnEsc) {
+        document.removeEventListener('keydown', this.dismissOnEsc);
+        this.dismissOnEsc = null;
+      }
     };
     this.input.once('pointerdown', dismissOnClick);
 
-    const dismissOnEsc = (e: KeyboardEvent) => {
+    this.dismissOnEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         this.hidePointerArrow();
-        document.removeEventListener('keydown', dismissOnEsc);
+        if (this.dismissOnEsc) {
+          document.removeEventListener('keydown', this.dismissOnEsc);
+          this.dismissOnEsc = null;
+        }
       }
     };
-    document.addEventListener('keydown', dismissOnEsc);
+    document.addEventListener('keydown', this.dismissOnEsc);
   }
 
   private hidePointerArrow() {
@@ -204,6 +212,10 @@ export class CityScene extends Phaser.Scene {
     if (this.pointerArrow) {
       this.pointerArrow.destroy();
       this.pointerArrow = null;
+    }
+    if (this.dismissOnEsc) {
+      document.removeEventListener('keydown', this.dismissOnEsc);
+      this.dismissOnEsc = null;
     }
   }
 

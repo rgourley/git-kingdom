@@ -23,7 +23,6 @@ function loadTokens(): string[] {
     else break;
   }
 
-  console.log(`[github-tokens] Loaded ${tokens.length} token(s)`);
   return tokens;
 }
 
