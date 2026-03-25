@@ -454,27 +454,32 @@ async function bootDirect(
       ))
       .sort((a, b) => b.repo.stargazers_count - a.repo.stargazers_count);
 
+    let targetKingdom = null;
     if (userRepos.length > 0) {
       const topRepo = userRepos[0];
-      const targetKingdom = languageKingdoms.find(k =>
+      targetKingdom = languageKingdoms.find(k =>
         k.repos.some(r => r.repo.full_name === topRepo.repo.full_name)
       );
-      if (targetKingdom) {
-        game.scene.start('CityScene', {
-          kingdom: targetKingdom,
+    }
+    // Fallback: if user has no matching repos, send them to Uncharted
+    if (!targetKingdom) {
+      targetKingdom = languageKingdoms.find(k => k.language === 'Uncharted');
+    }
+    if (targetKingdom) {
+      game.scene.start('CityScene', {
+        kingdom: targetKingdom,
+        spritePacks,
+        highlightUser,
+        focusRepo: null,
+        returnData: {
+          kingdoms: languageKingdoms,
           spritePacks,
           highlightUser,
-          focusRepo: null,
-          returnData: {
-            kingdoms: languageKingdoms,
-            spritePacks,
-            highlightUser,
-          },
-          autoShowSheet: highlightUser,
-        });
-        console.log(`[User link] Jumping to ${targetKingdom.language} city for ${highlightUser}`);
-        trackPageView(`/city/${targetKingdom.language.toLowerCase()}`, `Git Kingdom | ${highlightUser}`);
-      }
+        },
+        autoShowSheet: highlightUser,
+      });
+      console.log(`[User link] Jumping to ${targetKingdom.language} city for ${highlightUser}`);
+      trackPageView(`/city/${targetKingdom.language.toLowerCase()}`, `Git Kingdom | ${highlightUser}`);
     }
   }
 
