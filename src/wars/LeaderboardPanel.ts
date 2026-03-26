@@ -117,21 +117,31 @@ function showBattleDetailModal(b: KingdomBattle): void {
   const roundRows = b.rounds.map(r => {
     const rTotal = Math.max(1, r.a_delta + r.b_delta);
     const rPct = Math.round((r.a_delta / rTotal) * 100);
+    const heroes = [r.a_hero, r.b_hero].filter(Boolean);
+    const heroLine = heroes.length > 0
+      ? `<div style="font-size:8px;color:#c8a853;margin-top:1px;">⚔ ${heroes.join(' vs ')}</div>`
+      : '';
     return `
-      <div style="display:flex;align-items:center;gap:6px;margin:6px 0;">
-        <span style="color:#c8b89a;min-width:40px;font-size:10px;white-space:nowrap;">Day ${r.day}</span>
-        <div style="flex:1;display:flex;height:10px;border-radius:3px;overflow:hidden;background:#222;min-width:60px;">
-          <div style="width:${rPct}%;background:#4ade80;"></div>
-          <div style="width:${100 - rPct}%;background:#f87171;"></div>
+      <div style="margin:6px 0;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:#c8b89a;min-width:40px;font-size:10px;white-space:nowrap;">Day ${r.day}</span>
+          <div style="flex:1;display:flex;height:10px;border-radius:3px;overflow:hidden;background:#222;min-width:60px;">
+            <div style="width:${rPct}%;background:#4ade80;"></div>
+            <div style="width:${100 - rPct}%;background:#f87171;"></div>
+          </div>
+          <span style="color:#e8d5a3;min-width:70px;text-align:right;font-size:9px;white-space:nowrap;">+${r.a_delta} / +${r.b_delta}</span>
         </div>
-        <span style="color:#e8d5a3;min-width:70px;text-align:right;font-size:9px;white-space:nowrap;">+${r.a_delta} / +${r.b_delta}</span>
+        ${heroLine}
       </div>
     `;
   }).join('');
 
+  const heroLine = b.hero
+    ? `<div style="margin-top:4px;color:#c8a853;font-size:10px;">🏅 Champion: ${b.hero}</div>`
+    : '';
   const statusLine = isActive
     ? `<span style="color:#4ade80;">⚔️ Active</span> — ${daysLeft > 0 ? daysLeft + ' days remaining' : 'Ending soon!'}`
-    : `<span style="color:#c8b89a;">🏆 ${b.winner} won!</span>`;
+    : `<span style="color:#c8b89a;">🏆 ${b.winner} won!</span>${heroLine}`;
 
   content.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
