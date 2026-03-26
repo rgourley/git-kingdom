@@ -90,12 +90,10 @@ export default defineConfig({
         server.middlewares.use('/api/events', async (_req, res) => {
           const sb = getSupabase();
           if (!sb) { res.statusCode = 500; res.end('{}'); return; }
-          const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
           const { data } = await sb.from('world_events')
             .select('id, event_type, payload, created_at')
-            .gte('created_at', since)
-            .order('created_at', { ascending: true })
-            .limit(50);
+            .order('created_at', { ascending: false })
+            .limit(20);
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(data ?? []));
         });
