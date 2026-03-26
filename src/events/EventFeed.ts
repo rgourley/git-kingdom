@@ -29,12 +29,13 @@ export function formatEventMessage(event: WorldEvent): string {
   }
 }
 
-export async function fetchRecentEvents(sinceHoursAgo = 1): Promise<WorldEvent[]> {
-  const since = new Date(Date.now() - sinceHoursAgo * 60 * 60 * 1000).toISOString();
+export async function fetchRecentEvents(count = 10): Promise<WorldEvent[]> {
   try {
-    const res = await fetch(`${API_BASE}?since=${encodeURIComponent(since)}`);
+    const res = await fetch(`${API_BASE}?limit=${count}`);
     if (!res.ok) return [];
-    return await res.json();
+    const events: WorldEvent[] = await res.json();
+    // API returns newest-first when no `since` param; reverse for chronological replay
+    return events.reverse();
   } catch {
     return [];
   }

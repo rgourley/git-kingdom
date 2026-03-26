@@ -11,18 +11,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const since = typeof req.query.since === 'string'
-    ? req.query.since
-    : new Date(Date.now() - 60 * 60 * 1000).toISOString(); // default: 1 hour ago
+  const since = typeof req.query.since === 'string' ? req.query.since : undefined;
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
 
   try {
     const supabase = createServiceClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('world_events')
-      .select('id, event_type, payload, created_at')
-      .gte('created_at', since)
-      .order('created_at', { ascending: true })
-      .limit(50);
+      .select('id, event_type, payload, created_at');
+
+    if (since) {
+      // Time-based: events after a timestamp (ascending for replay)
+      query = query.gte('created_at', since).order('created_at', { ascending: true });
+    } else {
+      // Latest N: most recent events (descending, then reversed client-side for display)
+      query = query.order('created_at', { ascending: false });
+    }
+
+    const { data, error } = await query.limit(limit);
 
     if (error) {
       console.error('[api/events] Query failed:', error.message);
