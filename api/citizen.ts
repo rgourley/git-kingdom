@@ -199,6 +199,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const xp = totalContributions + totalStars * 5 + repoList.length * 10;
     const level = Math.max(1, Math.floor(Math.log2(xp + 1)));
 
+    // Battle record — find battles where this user was a hero
+    const { data: heroBattles } = await supabase
+      .from('kingdom_battles')
+      .select('id, kingdom_a, kingdom_b, metric, winner, hero, status, started_at, ends_at')
+      .eq('status', 'resolved')
+      .ilike('hero', login);
+
+    // Also find battles where user appeared as round hero
+    const { data: allResolvedBattles } = await supabase
+      .from('kingdom_battles')
+      .select('id, kingdom_a, kingdom_b, metric, winner, hero, status, rounds, started_at, ends_at')
+      .eq('status', 'resolved');
+
+    const battleRecord = {
+      hero_of: (heroBattles ?? []).map(b => ({
+        id: b.id,
+        kingdom_a: b.kingdom_a,
+        kingdom_b: b.kingdom_b,
+        metric: b.metric,
+        winner: b.winner,
+        ended: b.ends_at,
+      })),
+      participated_in: (allResolvedBattles ?? []).filter(b => {
+        const rounds = (b.rounds as { a_hero?: string; b_hero?: string }[]) ?? [];
+        return rounds.some(r =>
+          r.a_hero?.toLowerCase() === login.toLowerCase() ||
+          r.b_hero?.toLowerCase() === login.toLowerCase()
+        );
+      }).length,
+    };
+
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.json({
       login,
@@ -211,6 +242,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       stats,
       badges,
       languages,
+      battleRecord,
       repos: repoList.map(r => ({
         full_name: r.full_name,
         language: r.language,

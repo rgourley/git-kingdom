@@ -2353,6 +2353,24 @@ function buildSheetHTML(d: any): string {
     h += `</div>`;
   }
 
+  // Battle Record
+  if (d.battleRecord) {
+    const br = d.battleRecord;
+    if (br.hero_of.length > 0 || br.participated_in > 0) {
+      h += `<div class="sp-section"><div class="sp-section-title">⚔️ Battle Record</div>`;
+      if (br.hero_of.length > 0) {
+        h += `<div style="font-size:10px;color:#c8a853;margin-bottom:4px;">🏅 Champion of ${br.hero_of.length} battle${br.hero_of.length > 1 ? 's' : ''}</div>`;
+        for (const b of br.hero_of.slice(0, 3)) {
+          h += `<div style="font-size:9px;color:#e8d5a3;padding:2px 0;">🏆 ${esc(b.winner)} defeated ${esc(b.winner === b.kingdom_a ? b.kingdom_b : b.kingdom_a)} (${esc(b.metric)})</div>`;
+        }
+      }
+      if (br.participated_in > 0) {
+        h += `<div style="font-size:9px;color:#a0a0a0;margin-top:4px;">Fought in ${br.participated_in} battle${br.participated_in > 1 ? 's' : ''}</div>`;
+      }
+      h += `</div>`;
+    }
+  }
+
   // Thoughts
   const sheetThought = getFullThought(d.last_commit_message, d.title?.kingdom || '', d.title?.kingdom || '');
   h += `<div class="sp-section">`;

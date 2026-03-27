@@ -12,6 +12,8 @@ export interface BattleRound {
   day: number;
   a_delta: number;
   b_delta: number;
+  a_hero?: string;
+  b_hero?: string;
 }
 
 export interface KingdomBattle {
@@ -24,4 +26,5 @@ export interface KingdomBattle {
   status: 'active' | 'resolved';
   rounds: BattleRound[];
   winner: string | null;
+  hero?: string; // MVP of the winning side across all rounds
 }

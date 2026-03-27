@@ -169,7 +169,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const aValue = aMetrics?.[metric] ?? 0;
       const bValue = bMetrics?.[metric] ?? 0;
 
-      const rounds: { day: number; a_delta: number; b_delta: number }[] = battle.rounds ?? [];
+      const rounds: { day: number; a_delta: number; b_delta: number; a_hero?: string; b_hero?: string }[] = battle.rounds ?? [];
       const dayNum = rounds.length + 1;
 
       const prevATotal = rounds.reduce((s, r) => s + r.a_delta, 0);
@@ -177,7 +177,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const aDelta = Math.max(0, aValue - prevATotal);
       const bDelta = Math.max(0, bValue - prevBTotal);
 
-      rounds.push({ day: dayNum, a_delta: aDelta, b_delta: bDelta });
+      // Find hero for each side — top contributor by commits in repos of that language
+      // Only count registered users (exist in users table)
+      const findHero = async (language: string): Promise<string | undefined> => {
+        const langRepoIds = repos.filter(r => r.language === language).map(r => r.full_name);
+        if (langRepoIds.length === 0) return undefined;
+        // Get contributors for this language's repos, sorted by contributions
+        const langContribs = (contributors ?? [])
+          .filter(c => langRepoIds.some(id => c.repo_id === id || c.repo_id === id?.toLowerCase()))
+          .reduce((acc, c) => {
+            acc.set(c.login, (acc.get(c.login) ?? 0) + (c.contributions ?? 0));
+            return acc;
+          }, new Map<string, number>());
+
+        // Sort by contributions desc
+        const sorted = [...langContribs.entries()].sort((a, b) => b[1] - a[1]);
+        // Check if top contributors are registered users
+        for (const [login] of sorted.slice(0, 5)) {
+          const { data: user } = await supabase.from('users').select('login').ilike('login', login).limit(1);
+          if (user && user.length > 0) return login;
+        }
+        // Fallback to top contributor even if not registered
+        return sorted[0]?.[0];
+      };
+
+      const aHero = await findHero(battle.kingdom_a);
+      const bHero = await findHero(battle.kingdom_b);
+
+      rounds.push({ day: dayNum, a_delta: aDelta, b_delta: bDelta, a_hero: aHero, b_hero: bHero });
 
       if (now >= ends) {
         // ── Step 4: Resolve battle ──
@@ -186,17 +213,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const winner = aTotalGain >= bTotalGain ? battle.kingdom_a : battle.kingdom_b;
         const loser = winner === battle.kingdom_a ? battle.kingdom_b : battle.kingdom_a;
 
+        // Find the overall hero — most frequent hero on winning side
+        const heroKey = winner === battle.kingdom_a ? 'a_hero' : 'b_hero';
+        const heroCounts = new Map<string, number>();
+        for (const r of rounds) {
+          const h = r[heroKey];
+          if (h) heroCounts.set(h, (heroCounts.get(h) ?? 0) + 1);
+        }
+        const hero = heroCounts.size > 0
+          ? [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+          : undefined;
+
         await supabase
           .from('kingdom_battles')
-          .update({ status: 'resolved', rounds, winner })
+          .update({ status: 'resolved', rounds, winner, hero: hero ?? null })
           .eq('id', battle.id);
 
+        const heroMsg = hero ? ` ${hero} named Champion of ${winner}!` : '';
         await writeEvent('battle_resolved', {
           battle_id: battle.id,
           winner,
           loser,
+          hero,
           metric: battle.metric,
-          message: `${winner} triumphs over ${loser} in the battle for ${battle.metric}!`,
+          message: `${winner} triumphs over ${loser} in the battle for ${battle.metric}!${heroMsg}`,
         });
 
         stats.battles_resolved++;
@@ -206,6 +246,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .update({ rounds })
           .eq('id', battle.id);
 
+        const leadHero = aDelta > bDelta ? aHero : bHero;
+        const heroCallout = leadHero ? ` ${leadHero} leads the charge!` : '';
         await writeEvent('battle_round', {
           battle_id: battle.id,
           kingdom_a: battle.kingdom_a,
@@ -213,9 +255,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           day: dayNum,
           a_delta: aDelta,
           b_delta: bDelta,
+          a_hero: aHero,
+          b_hero: bHero,
           message: dayNum === 1
-            ? `First skirmish! ${battle.kingdom_a} ${aDelta > bDelta ? 'draws first blood' : 'is caught off guard'} (+${aDelta} vs +${bDelta})`
-            : `Round ${dayNum}: ${battle.kingdom_a} ${aDelta > bDelta ? 'pushes forward' : 'falls behind'} (+${aDelta} vs +${bDelta})`,
+            ? `First skirmish! ${battle.kingdom_a} ${aDelta > bDelta ? 'draws first blood' : 'is caught off guard'} (+${aDelta} vs +${bDelta})${heroCallout}`
+            : `Round ${dayNum}: ${battle.kingdom_a} ${aDelta > bDelta ? 'pushes forward' : 'falls behind'} (+${aDelta} vs +${bDelta})${heroCallout}`,
         });
 
         stats.battles_progressed++;
