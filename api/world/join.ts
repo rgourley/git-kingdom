@@ -47,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Fetch user's repos from GitHub (with contributor data)
     const MAX_REPOS_PER_JOIN = 50;
-    const metrics = await fetchUserReposAsMetrics(login, githubToken, MAX_REPOS_PER_JOIN, 1);
+    const metrics = await fetchUserReposAsMetrics(login, githubToken, MAX_REPOS_PER_JOIN, 0);
     console.log(`[join] ${login}: found ${metrics.length} repos`);
 
     // Batch all DB operations instead of sequential per-repo
@@ -66,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Build a map of full_name → repo id for contributor + user_repos linking
     const repoIdMap = new Map<string, number>();
     for (const r of (upsertedRepos || [])) {
-      repoIdMap.set(r.full_name, r.id);
+      repoIdMap.set(r.full_name.toLowerCase(), r.id);
     }
 
     // 2. Batch upsert all contributors (chunked at 500 to stay under PostgREST row limit)
@@ -114,10 +114,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Log activity for admin visibility
     console.log(`[join] ${login}: added ${addedRepos} repos: ${addedRepoNames.join(', ')}`);
 
-    if (isFirstJoin) {
+    if (isFirstJoin && addedRepos > 0) {
       await writeEvent('citizen_joined', {
         username: login,
-        repo_count: metrics.length,
+        repo_count: addedRepos,
       });
     }
 
