@@ -51,8 +51,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (apiRes.ok) {
       const d = await apiRes.json();
 
-      const title = `${d.login} — ${d.title.name} of ${d.title.kingdom} | Git Kingdom`;
-      const desc = `${d.title.icon} Level ${d.level} ${d.title.name} with ${d.totalContributions.toLocaleString()} contributions across ${d.repos.length} repos. Badges: ${d.badges.map((b: { label: string }) => b.label).join(', ')}.`;
+      const title = `${d.login} — Level ${d.level} ${d.title.name} of ${d.title.kingdom} | Git Kingdom`;
+      const badgeList = d.badges.slice(0, 4).map((b: { label: string }) => b.label).join(', ');
+      const desc = `${d.login}'s RPG character sheet: Level ${d.level} ${d.title.name} in the ${d.title.kingdom} Kingdom. ${d.totalContributions.toLocaleString()} contributions, ${d.repos.length} repos. Badges: ${badgeList}.`;
       const ogImage = `https://www.gitkingdom.com/api/citizen-og?username=${encodeURIComponent(d.login)}`;
       const pageUrl = `https://www.gitkingdom.com/citizen/${d.login}`;
 

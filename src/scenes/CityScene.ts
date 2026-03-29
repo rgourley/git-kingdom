@@ -535,8 +535,9 @@ export class CityScene extends Phaser.Scene {
           // Zoom in close
           cityZoomIndex = 4; // 2x zoom
           this.cameras.main.setZoom(CITY_ZOOM_LEVELS[cityZoomIndex]);
-          // Show bouncing arrow above the building
+          // Show bouncing arrow above the building and open info panel
           this.showPointerArrow(bx, targetBuilding.y * TILE_SIZE - 12);
+          this.showBuildingInfo(targetBuilding);
           console.log(`[Deep link] Focused on ${focusRepo} at (${targetBuilding.x}, ${targetBuilding.y})`);
         }
       }

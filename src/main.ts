@@ -352,16 +352,6 @@ async function bootDirect(
     }
   }
 
-  const game = createPhaserGame();
-  game.scene.add('WorldScene', WorldScene, true, {
-    kingdoms: languageKingdoms,
-    spritePacks,
-    highlightUser,
-  });
-  game.scene.add('CityScene', CityScene, false);
-  (window as any).__game = game;
-  trackPageView(`/${highlightUser || ''}`, `Git Kingdom | ${highlightUser || 'World Map'}`);
-
   // Deep link: /owner/repo → jump straight into the city containing that repo
   if (focusRepo && highlightUser) {
     const fullName = `${highlightUser}/${focusRepo}`;
@@ -369,7 +359,9 @@ async function bootDirect(
       k.repos.some(r => r.repo.full_name.toLowerCase() === fullName.toLowerCase())
     );
     if (targetKingdom) {
-      game.scene.start('CityScene', {
+      const game = createPhaserGame();
+      game.scene.add('WorldScene', WorldScene, false);
+      game.scene.add('CityScene', CityScene, true, {
         kingdom: targetKingdom,
         spritePacks,
         highlightUser,
@@ -380,10 +372,22 @@ async function bootDirect(
           highlightUser,
         },
       });
+      (window as any).__game = game;
       console.log(`[Deep link] Jumping to ${targetKingdom.language} city for ${fullName}`);
       trackPageView(`/city/${targetKingdom.language.toLowerCase()}/${fullName}`, `Git Kingdom | ${targetKingdom.language}`);
+      return;
     }
   }
+
+  const game = createPhaserGame();
+  game.scene.add('WorldScene', WorldScene, true, {
+    kingdoms: languageKingdoms,
+    spritePacks,
+    highlightUser,
+  });
+  game.scene.add('CityScene', CityScene, false);
+  (window as any).__game = game;
+  trackPageView(`/${highlightUser || ''}`, `Git Kingdom | ${highlightUser || 'World Map'}`);
 }
 
 // ─── Analytics: event delegation for GitHub links & sign-in ──
