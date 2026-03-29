@@ -51,8 +51,9 @@ export function renderLeaderboardHTML(
   const recentResolved = battles.filter(b => b.status === 'resolved').slice(0, 3);
 
   const battleRows = activeBattles.map((b, idx) => {
-    const aTotal = b.rounds.reduce((s, r) => s + r.a_delta, 0);
-    const bTotal = b.rounds.reduce((s, r) => s + r.b_delta, 0);
+    const visibleRounds = b.rounds.filter(r => r.day > 0);
+    const aTotal = visibleRounds.reduce((s, r) => s + r.a_delta, 0);
+    const bTotal = visibleRounds.reduce((s, r) => s + r.b_delta, 0);
     const total = Math.max(1, aTotal + bTotal);
     const aPct = Math.round((aTotal / total) * 100);
 
@@ -67,7 +68,7 @@ export function renderLeaderboardHTML(
         </div>
         <div style="display:flex;justify-content:space-between;font-size:8px;color:#e8d5a3;margin-top:2px;">
           <span>${b.kingdom_a}: +${aTotal}</span>
-          <span style="color:#c8b89a;">Day ${b.rounds.length}</span>
+          <span style="color:#c8b89a;">Day ${visibleRounds.length}</span>
           <span>${b.kingdom_b}: +${bTotal}</span>
         </div>
         <div style="font-size:7px;color:#888;text-align:center;margin-top:2px;">▼ click for details</div>
@@ -106,20 +107,25 @@ function showBattleDetailModal(b: KingdomBattle): void {
   const content = document.getElementById('battle-detail-content');
   if (!panel || !content) return;
 
-  const aTotal = b.rounds.reduce((s, r) => s + r.a_delta, 0);
-  const bTotal = b.rounds.reduce((s, r) => s + r.b_delta, 0);
+  const visibleRounds = b.rounds.filter(r => r.day > 0);
+  const aTotal = visibleRounds.reduce((s, r) => s + r.a_delta, 0);
+  const bTotal = visibleRounds.reduce((s, r) => s + r.b_delta, 0);
   const total = Math.max(1, aTotal + bTotal);
   const aPct = Math.round((aTotal / total) * 100);
   const metricName = METRIC_DISPLAY[b.metric] ?? b.metric;
   const isActive = b.status === 'active';
   const daysLeft = Math.max(0, Math.ceil((new Date(b.ends_at).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
 
-  const roundRows = b.rounds.map(r => {
+  const roundRows = visibleRounds.map(r => {
     const rTotal = Math.max(1, r.a_delta + r.b_delta);
     const rPct = Math.round((r.a_delta / rTotal) * 100);
-    const heroes = [r.a_hero, r.b_hero].filter(Boolean);
-    const heroLine = heroes.length > 0
-      ? `<div style="font-size:8px;color:#c8a853;margin-top:1px;">⚔ ${heroes.join(' vs ')}</div>`
+    const heroLink = (name: string) =>
+      `<a href="/${name}" style="color:#c8a853;text-decoration:none;cursor:pointer;" onmouseenter="this.style.color='#ffd700'" onmouseleave="this.style.color='#c8a853'">${name}</a>`;
+    const heroParts: string[] = [];
+    if (r.a_hero) heroParts.push(`${heroLink(r.a_hero)} (${b.kingdom_a})`);
+    if (r.b_hero) heroParts.push(`${heroLink(r.b_hero)} (${b.kingdom_b})`);
+    const heroLine = heroParts.length > 0
+      ? `<div style="font-size:8px;color:#888;margin-top:1px;">🏅 ${heroParts.join('  vs  ')}</div>`
       : '';
     return `
       <div style="margin:6px 0;">
@@ -137,7 +143,7 @@ function showBattleDetailModal(b: KingdomBattle): void {
   }).join('');
 
   const heroLine = b.hero
-    ? `<div style="margin-top:4px;color:#c8a853;font-size:10px;">🏅 Champion: ${b.hero}</div>`
+    ? `<div style="margin-top:4px;color:#c8a853;font-size:10px;">🏅 Champion: <a href="/${b.hero}" style="color:#ffd700;text-decoration:none;">${b.hero}</a></div>`
     : '';
   const statusLine = isActive
     ? `<span style="color:#4ade80;">⚔️ Active</span> — ${daysLeft > 0 ? daysLeft + ' days remaining' : 'Ending soon!'}`

@@ -31,6 +31,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const service = createServiceClient();
 
+    // Check if this is a first-time join (no existing repos linked)
+    const { count: existingRepoCount } = await service.from('user_repos')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    const isFirstJoin = (existingRepoCount ?? 0) === 0;
+
     // Use pooled GitHub token for API calls
     let githubToken: string;
     try {
@@ -108,10 +114,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Log activity for admin visibility
     console.log(`[join] ${login}: added ${addedRepos} repos: ${addedRepoNames.join(', ')}`);
 
-    await writeEvent('citizen_joined', {
-      username: login,
-      repo_count: metrics.length,
-    });
+    if (isFirstJoin) {
+      await writeEvent('citizen_joined', {
+        username: login,
+        repo_count: metrics.length,
+      });
+    }
 
     // Count totals for response
     const { count: totalRepos } = await service.from('repos').select('*', { count: 'exact', head: true });

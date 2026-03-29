@@ -38,6 +38,8 @@ function getBaseHtml(): string {
   if (cachedHtml) return cachedHtml;
 
   const candidates = [
+    join(__dirname, '..', 'dist', 'index.html'),
+    join(__dirname, '..', 'index.html'),
     join(process.cwd(), 'dist', 'index.html'),
     join(process.cwd(), 'index.html'),
   ];
@@ -206,8 +208,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const stars = formatStars(repo.stargazers);
         const lang = repo.language || 'Unknown';
         const desc = repo.description
-          ? `${repo.description} | ${stars} stars in the ${lang} Kingdom on Git Kingdom.`
-          : `${repo.full_name} has ${stars} stars in the ${lang} Kingdom on Git Kingdom.`;
+          ? `${repo.description} — ${stars} ★ in the ${lang} Kingdom. Explore ${repo.full_name} as a pixel-art RPG building on Git Kingdom.`
+          : `Explore ${repo.full_name} as a pixel-art RPG building on Git Kingdom. ${stars} ★ in the ${lang} Kingdom — see contributors, stats, and battles.`;
 
         const ogParams = new URLSearchParams({
           title: repo.full_name,
@@ -216,7 +218,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ...(repo.description ? { desc: repo.description.substring(0, 120) } : {}),
         });
         const meta: SeoMeta = {
-          title: `${repo.full_name} | Git Kingdom`,
+          title: `${repo.full_name} — ${lang} Kingdom | Git Kingdom`,
           description: desc.substring(0, 160),
           url: `${baseUrl}/${repo.full_name}`,
           ogImage: `${baseUrl}/api/og?${ogParams}`,
@@ -227,6 +229,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             'codeRepository': `https://github.com/${repo.full_name}`,
             'programmingLanguage': lang,
             'description': repo.description || `${repo.full_name} on Git Kingdom`,
+            'isPartOf': {
+              '@type': 'WebApplication',
+              'name': 'Git Kingdom',
+              'url': baseUrl,
+            },
+          },
+        };
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200');
+        return res.send(injectMeta(html, meta));
+      }
+
+      // Repo not in DB — still serve specific meta based on the URL path
+      {
+        const owner = segments[0];
+        const repoName = segments[1];
+        const fullName = `${owner}/${repoName}`;
+        const ogParams = new URLSearchParams({ title: fullName });
+        const meta: SeoMeta = {
+          title: `${fullName} | Git Kingdom`,
+          description: `Explore ${fullName} as a pixel-art RPG building on Git Kingdom. See contributors walking the kingdom, repo stats, and language territories.`.substring(0, 160),
+          url: `${baseUrl}/${fullName}`,
+          ogImage: `${baseUrl}/api/og?${ogParams}`,
+          jsonLd: {
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareSourceCode',
+            'name': repoName,
+            'codeRepository': `https://github.com/${fullName}`,
+            'description': `${fullName} visualized as a pixel-art RPG building on Git Kingdom`,
             'isPartOf': {
               '@type': 'WebApplication',
               'name': 'Git Kingdom',
@@ -301,6 +333,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (userRepos && userRepos.length > 0) {
         const topRepoNames = userRepos.slice(0, 3).map(r => r.full_name.split('/')[1]).join(', ');
         const totalStars = userRepos.reduce((s, r) => s + r.stargazers, 0);
+        const languages = [...new Set(userRepos.map(r => r.language).filter(Boolean))];
+        const langInfo = languages.length > 0 ? ` Kingdoms: ${languages.slice(0, 3).join(', ')}.` : '';
 
         const userOgParams = new URLSearchParams({
           title: segments[0],
@@ -308,15 +342,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           desc: `Top repos: ${topRepoNames}`,
         });
         const meta: SeoMeta = {
-          title: `${segments[0]} | Git Kingdom`,
-          description: `Explore ${segments[0]}'s repos on Git Kingdom: ${topRepoNames}. ${formatStars(totalStars)} total stars across ${userRepos.length}+ projects.`.substring(0, 160),
+          title: `${segments[0]}'s Kingdom — ${formatStars(totalStars)} ★ | Git Kingdom`,
+          description: `Explore ${segments[0]}'s pixel-art kingdom on Git Kingdom. ${formatStars(totalStars)} ★ across ${userRepos.length}+ repos: ${topRepoNames}.${langInfo}`.substring(0, 160),
           url: `${baseUrl}/${segments[0]}`,
           ogImage: `${baseUrl}/api/og?${userOgParams}`,
           jsonLd: {
             '@context': 'https://schema.org',
             '@type': 'ProfilePage',
             'name': segments[0],
-            'description': `${segments[0]}'s repositories on Git Kingdom`,
+            'description': `${segments[0]}'s repositories visualized as a pixel-art RPG kingdom`,
+            'mainEntity': {
+              '@type': 'Person',
+              'name': segments[0],
+              'url': `https://github.com/${segments[0]}`,
+            },
+            'isPartOf': {
+              '@type': 'WebApplication',
+              'name': 'Git Kingdom',
+              'url': baseUrl,
+            },
+          },
+        };
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200');
+        return res.send(injectMeta(html, meta));
+      }
+
+      // User/org not in DB — still serve specific meta based on the URL path
+      {
+        const name = segments[0];
+        const ogParams = new URLSearchParams({ title: name, desc: 'GitHub profile as a pixel-art kingdom' });
+        const meta: SeoMeta = {
+          title: `${name}'s Kingdom | Git Kingdom`,
+          description: `Explore ${name}'s GitHub profile as a pixel-art RPG kingdom on Git Kingdom. Repos become buildings, contributors become citizens.`.substring(0, 160),
+          url: `${baseUrl}/${name}`,
+          ogImage: `${baseUrl}/api/og?${ogParams}`,
+          jsonLd: {
+            '@context': 'https://schema.org',
+            '@type': 'ProfilePage',
+            'name': name,
+            'mainEntity': {
+              '@type': 'Person',
+              'name': name,
+              'url': `https://github.com/${name}`,
+            },
             'isPartOf': {
               '@type': 'WebApplication',
               'name': 'Git Kingdom',
@@ -331,7 +401,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // ── Fallback: unknown path — serve default HTML ──
+    // ── Fallback: deep paths (3+ segments) — serve default HTML ──
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200');
     return res.send(html);

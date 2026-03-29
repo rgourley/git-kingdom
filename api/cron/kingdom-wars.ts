@@ -169,13 +169,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const aValue = aMetrics?.[metric] ?? 0;
       const bValue = bMetrics?.[metric] ?? 0;
 
-      const rounds: { day: number; a_delta: number; b_delta: number; a_hero?: string; b_hero?: string }[] = battle.rounds ?? [];
-      const dayNum = rounds.length + 1;
+      const allRounds: { day: number; a_delta: number; b_delta: number; a_hero?: string; b_hero?: string }[] = battle.rounds ?? [];
+      // Day 0 = baseline snapshot (stored at battle creation); actual rounds are day 1+
+      const snapshot = allRounds.find(r => r.day === 0);
+      const rounds = allRounds.filter(r => r.day > 0);
+      const baseA = snapshot?.a_delta ?? 0;
+      const baseB = snapshot?.b_delta ?? 0;
+
+      // Compute actual calendar day from battle start
+      const started = new Date(battle.started_at);
+      const dayNum = Math.max(1, Math.ceil((now.getTime() - started.getTime()) / (24 * 60 * 60 * 1000)));
 
       const prevATotal = rounds.reduce((s, r) => s + r.a_delta, 0);
       const prevBTotal = rounds.reduce((s, r) => s + r.b_delta, 0);
-      const aDelta = Math.max(0, aValue - prevATotal);
-      const bDelta = Math.max(0, bValue - prevBTotal);
+      const aDelta = Math.max(0, aValue - baseA - prevATotal);
+      const bDelta = Math.max(0, bValue - baseB - prevBTotal);
 
       // Find hero for each side — top contributor by commits in repos of that language
       // Only count registered users (exist in users table)
@@ -204,7 +212,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const aHero = await findHero(battle.kingdom_a);
       const bHero = await findHero(battle.kingdom_b);
 
-      rounds.push({ day: dayNum, a_delta: aDelta, b_delta: bDelta, a_hero: aHero, b_hero: bHero });
+      // Merge with existing round for same calendar day, or add new
+      const existingRound = rounds.find(r => r.day === dayNum);
+      if (existingRound) {
+        existingRound.a_delta += aDelta;
+        existingRound.b_delta += bDelta;
+        existingRound.a_hero = aHero;
+        existingRound.b_hero = bHero;
+      } else {
+        rounds.push({ day: dayNum, a_delta: aDelta, b_delta: bDelta, a_hero: aHero, b_hero: bHero });
+      }
+      const updatedRounds = snapshot ? [snapshot, ...rounds] : rounds;
 
       if (now >= ends) {
         // ── Step 4: Resolve battle ──
@@ -226,7 +244,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         await supabase
           .from('kingdom_battles')
-          .update({ status: 'resolved', rounds, winner, hero: hero ?? null })
+          .update({ status: 'resolved', rounds: updatedRounds, winner, hero: hero ?? null })
           .eq('id', battle.id);
 
         const heroMsg = hero ? ` ${hero} named Champion of ${winner}!` : '';
@@ -243,7 +261,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         await supabase
           .from('kingdom_battles')
-          .update({ rounds })
+          .update({ rounds: updatedRounds })
           .eq('id', battle.id);
 
         const leadHero = aDelta > bDelta ? aHero : bHero;
@@ -339,13 +357,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         expansion: 'Expansion',
       };
 
+      // Store baseline metric values as a day-0 snapshot so rounds track growth
+      const pickMetric = pick.metric as keyof typeof maxes;
+      const aSnapshot = langMetrics.get(pick.a)?.[pickMetric] ?? 0;
+      const bSnapshot = langMetrics.get(pick.b)?.[pickMetric] ?? 0;
+
       await supabase.from('kingdom_battles').insert({
         kingdom_a: pick.a,
         kingdom_b: pick.b,
         metric: pick.metric,
         ends_at: endsAt,
         status: 'active',
-        rounds: [],
+        rounds: [{ day: 0, a_delta: aSnapshot, b_delta: bSnapshot }],
       });
 
       await writeEvent('battle_started', {

@@ -1,6 +1,11 @@
 {
   "buildCommand": "npx tsx scripts/export-world.ts && npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/page.ts": {
+      "includeFiles": "dist/index.html"
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/refresh-pushed",
