@@ -6,6 +6,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createServiceClient } from './lib/supabase';
+import { getNextToken } from './lib/github-tokens';
 
 // ─── Title system (mirrored from CityScene.ts) ─────────────────
 const TITLE_TIERS: { min: number; icon: string; names: string[] }[] = [
@@ -137,7 +138,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!contribs || contribs.length === 0) {
-      return res.status(404).json({ error: 'Citizen not found' });
+      // Not in DB — try live GitHub lookup for a basic character sheet
+      return fetchGitHubFallback(username, res);
     }
 
     // 2. Fetch repo details for all repos this citizen contributes to
@@ -257,4 +259,84 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error(`[citizen] Error for ${username}:`, msg);
     res.status(500).json({ error: 'Internal error' });
   }
+}
+
+// ─── GitHub fallback for users not in the DB ────────────────────
+async function fetchGitHubFallback(username: string, res: VercelResponse) {
+  let token: string;
+  try {
+    token = getNextToken();
+  } catch {
+    return res.status(404).json({ error: 'Citizen not found' });
+  }
+
+  const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.v3+json' };
+
+  // Fetch profile + repos in parallel
+  const [profileRes, reposRes] = await Promise.all([
+    fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, { headers }),
+    fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?per_page=100&sort=stars&direction=desc`, { headers }),
+  ]);
+
+  if (!profileRes.ok) {
+    return res.status(404).json({ error: 'Citizen not found' });
+  }
+
+  const profile = await profileRes.json();
+  const allRepos = reposRes.ok ? await reposRes.json() : [];
+
+  // Only include repos with 1+ stars
+  const repos = allRepos.filter((r: any) => !r.fork && r.stargazers_count >= 1);
+
+  const login = profile.login;
+  const avatar_url = profile.avatar_url;
+  const totalContributions = profile.public_repos || 0;
+  const languages = Array.from(new Set(repos.map((r: any) => r.language).filter(Boolean))) as string[];
+  const primaryLanguage = languages[0] || 'Unknown';
+
+  const title = getTitle(totalContributions, false);
+  const totalStars = repos.reduce((s: number, r: any) => s + r.stargazers_count, 0);
+
+  const xp = totalContributions + totalStars * 5 + repos.length * 10;
+  const level = Math.max(1, Math.floor(Math.log2(xp + 1)));
+
+  const repoList = repos.map((r: any) => ({
+    full_name: r.full_name,
+    language: r.language,
+    stargazers: r.stargazers_count,
+    pushed_at: r.pushed_at,
+    is_king: r.owner?.login?.toLowerCase() === login.toLowerCase(),
+    contributions: 0,
+  }));
+
+  const badges: Badge[] = [];
+  if (repos.some((r: any) => r.owner?.login?.toLowerCase() === login.toLowerCase())) {
+    badges.push({ id: 'founder', icon: '🏰', label: 'Realm Founder' });
+  }
+  if (languages.length >= 3) {
+    badges.push({ id: 'polyglot', icon: '🌍', label: 'Polyglot' });
+  }
+  if (totalStars >= 1000) {
+    badges.push({ id: 'star_bearer', icon: '⭐', label: 'Star Bearer' });
+  }
+
+  res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+  res.json({
+    login,
+    avatar_url,
+    last_commit_message: null,
+    totalContributions,
+    level,
+    xp,
+    title: { icon: title.icon, name: title.name, kingdom: primaryLanguage },
+    stats: {
+      power: statScale(totalContributions, 10000),
+      reach: statScale(totalStars, 50000),
+      versatility: statScale(repos.length * languages.length, 50),
+    },
+    badges,
+    languages,
+    battleRecord: { hero_of: [], participated_in: 0 },
+    repos: repoList,
+  });
 }
