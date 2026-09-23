@@ -8,6 +8,7 @@ import { createServerClient, createServiceClient } from '../lib/supabase';
 import { fetchUserReposAsMetrics, metricsToRepoRow } from '../lib/github-server';
 import { getNextToken } from '../lib/github-tokens';
 import { writeEvent } from '../lib/events';
+import { checkJoinLimit } from '../lib/rate-limit';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -26,6 +27,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const login = meta.user_name || meta.preferred_username;
   if (!login) {
     return res.status(400).json({ error: 'Invalid user metadata' });
+  }
+
+  const joinLimit = await checkJoinLimit(login);
+  if (joinLimit.limited) {
+    const retryAfter = Math.ceil(joinLimit.resetInMs / 1000);
+    res.setHeader('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: 'Repos were refreshed recently.', retryAfter });
   }
 
   try {

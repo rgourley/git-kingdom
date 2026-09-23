@@ -8,6 +8,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createServiceClient } from '../lib/supabase';
 import { writeEvent } from '../lib/events';
+import { selectAll } from '../lib/select-all';
 
 const METRICS = ['military_strength', 'wealth', 'population', 'expansion'] as const;
 const BATTLE_DURATION_DAYS = { min: 3, max: 5 };
@@ -37,17 +38,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // ── Step 1: Aggregate metrics from repos + contributors ──
-    const { data: repos } = await supabase
+    const repos = await selectAll<any>((from, to) => supabase
       .from('repos')
-      .select('language, stargazers, full_name, owner_login, created_at, pushed_at');
+      .select('id, language, stargazers, full_name, owner_login, created_at, pushed_at')
+      .order('id')
+      .range(from, to));
 
-    const { data: contributors } = await supabase
+    const contributors = await selectAll<any>((from, to) => supabase
       .from('contributors')
-      .select('repo_id, login, contributions');
+      .select('repo_id, login, contributions')
+      .order('repo_id')
+      .order('login')
+      .range(from, to));
 
-    if (!repos) {
-      return res.status(500).json({ error: 'Failed to fetch repos' });
+    // contributors.repo_id is the numeric repos.id
+    const contribsByRepoId = new Map<number, any[]>();
+    for (const c of contributors) {
+      const list = contribsByRepoId.get(c.repo_id) ?? [];
+      list.push(c);
+      contribsByRepoId.set(c.repo_id, list);
     }
+    const langByRepoId = new Map<number, string | null>(repos.map(r => [r.id, r.language]));
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -69,9 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const m = langMetrics.get(lang) ?? { military_strength: 0, wealth: 0, population: 0, expansion: 0 };
       m.wealth += repo.stargazers ?? 0;
       if (repo.pushed_at && repo.pushed_at >= thirtyDaysAgo) {
-        const repoContribs = (contributors ?? []).filter(c =>
-          c.repo_id === repo.full_name || c.repo_id === repo.full_name?.toLowerCase()
-        );
+        const repoContribs = contribsByRepoId.get(repo.id) ?? [];
         m.military_strength += repoContribs.reduce((sum, c) => sum + (c.contributions ?? 0), 0);
         m.population += repoContribs.length;
       }
@@ -188,11 +197,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Find hero for each side — top contributor by commits in repos of that language
       // Only count registered users (exist in users table)
       const findHero = async (language: string): Promise<string | undefined> => {
-        const langRepoIds = repos.filter(r => r.language === language).map(r => r.full_name);
+        const langRepoIds = repos.filter(r => r.language === language).map(r => r.id);
         if (langRepoIds.length === 0) return undefined;
         // Get contributors for this language's repos, sorted by contributions
-        const langContribs = (contributors ?? [])
-          .filter(c => langRepoIds.some(id => c.repo_id === id || c.repo_id === id?.toLowerCase()))
+        const langContribs = langRepoIds
+          .flatMap(id => contribsByRepoId.get(id) ?? [])
           .reduce((acc, c) => {
             acc.set(c.login, (acc.get(c.login) ?? 0) + (c.contributions ?? 0));
             return acc;
@@ -299,12 +308,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Build adjacency: languages that share contributors are "adjacent"
     const langUsers = new Map<string, Set<string>>();
-    for (const c of contributors ?? []) {
-      const repo = repos.find(r => r.full_name === c.repo_id);
-      if (!repo?.language) continue;
-      const set = langUsers.get(repo.language) ?? new Set();
+    for (const c of contributors) {
+      const language = langByRepoId.get(c.repo_id);
+      if (!language) continue;
+      const set = langUsers.get(language) ?? new Set();
       set.add(c.login);
-      langUsers.set(repo.language, set);
+      langUsers.set(language, set);
     }
 
     const adjacency = new Map<string, string[]>();

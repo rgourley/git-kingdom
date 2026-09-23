@@ -10,6 +10,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { selectAll } from '../lib/select-all';
 
 const BASE_URL = 'https://gitkingdom.com';
 const MAX_URLS = 40_000;
@@ -28,14 +29,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Fetch all owner logins and deduplicate in JS
     // (Supabase JS client doesn't support SELECT DISTINCT directly)
-    const { data: ownerRows } = await supabase
+    const ownerRows = await selectAll<{ owner_login: string }>((from, to) => supabase
       .from('repos')
       .select('owner_login')
-      .limit(100_000);
+      .order('id')
+      .range(from, to));
 
-    const allOwners = ownerRows
-      ? [...new Set(ownerRows.map(r => r.owner_login))].sort()
-      : [];
+    const allOwners = [...new Set(ownerRows.map(r => r.owner_login))].sort();
 
     const offset = (page - 1) * USERS_PER_PAGE;
     const pageOwners = allOwners.slice(offset, offset + USERS_PER_PAGE);

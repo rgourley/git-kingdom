@@ -31,6 +31,19 @@ function getDailyLimiter(): Ratelimit {
   return dailyLimiter;
 }
 
+/** Join limiter: 3 joins per hour for each GitHub login. One join uses about 7 GitHub calls per repo. */
+let joinLimiter: Ratelimit | null = null;
+function getJoinLimiter(): Ratelimit {
+  if (!joinLimiter) {
+    joinLimiter = new Ratelimit({
+      redis: getRedis(),
+      limiter: Ratelimit.slidingWindow(3, '3600 s'),
+      prefix: 'rl:join',
+    });
+  }
+  return joinLimiter;
+}
+
 export interface RateLimitResult {
   limited: boolean;
   remaining: number;
@@ -46,5 +59,11 @@ export async function checkMinuteLimit(ip: string): Promise<RateLimitResult> {
 /** Check daily rate limit for an IP. */
 export async function checkDailyLimit(ip: string): Promise<RateLimitResult> {
   const { success, remaining, reset } = await getDailyLimiter().limit(ip);
+  return { limited: !success, remaining, resetInMs: reset - Date.now() };
+}
+
+/** Check the join (refresh repos) rate limit for a GitHub login. */
+export async function checkJoinLimit(login: string): Promise<RateLimitResult> {
+  const { success, remaining, reset } = await getJoinLimiter().limit(login.toLowerCase());
   return { limited: !success, remaining, resetInMs: reset - Date.now() };
 }

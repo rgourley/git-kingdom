@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Redirect to /<username> so the app skips the title screen and goes straight to the map.
-  // The boot() function in main.ts detects the route and auto-joins the user's repos.
+  // On first login, the gk_needs_join cookie makes index.html open the profile panel, which claims the repos.
   const redirectPath = login ? `/${encodeURIComponent(login)}` : '/';
   res.redirect(302, redirectPath);
 }

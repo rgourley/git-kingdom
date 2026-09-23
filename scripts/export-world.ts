@@ -11,6 +11,7 @@
 import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { selectAll } from '../api/lib/select-all';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -23,18 +24,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 async function exportWorld() {
   console.log('📦 Exporting world data from Supabase...');
 
-  const { data: repos, error } = await supabase
+  const repos = await selectAll<any>((from, to) => supabase
     .from('repos')
     .select('*, contributors(*)')
     .gte('stargazers', 1)  // Only repos with at least 1 star
-    .order('stargazers', { ascending: false });
+    .order('stargazers', { ascending: false })
+    .order('id')
+    .range(from, to));
 
-  if (error) {
-    console.error('Supabase error:', error.message);
-    process.exit(1);
-  }
-
-  if (!repos || repos.length === 0) {
+  if (repos.length === 0) {
     console.error('No repos found in Supabase!');
     process.exit(1);
   }
