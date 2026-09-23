@@ -6,9 +6,9 @@ import { KingdomMetrics } from './types';
 import { SpritePacks } from './generators/TilesetGenerator';
 import { generateTestRepos } from './testdata';
 import { parseRoute } from './router';
-import { fetchUniversalWorld, fetchCurrentUser, joinWorld, invalidateWorldCache } from './api/client';
+import { fetchUniversalWorld, invalidateWorldCache } from './api/client';
 import {
-  trackPageView, trackGameStart, trackWorldJoined,
+  trackPageView, trackGameStart,
   trackGitHubLinkClicked, trackSignInInitiated,
 } from './analytics';
 import { groupByLanguage } from './groupByLanguage';
@@ -169,21 +169,6 @@ async function boot() {
     // Clean URL route: /facebook or /facebook/react
     // Translate to the same flow as ?user=facebook
     params.set('user', route.username);
-
-    // If user just signed in via OAuth, auto-join their repos to the universal world
-    // (fire-and-forget — doesn't block the boot)
-    fetchCurrentUser().then(user => {
-      if (user && user.login.toLowerCase() === route.username!.toLowerCase()) {
-        console.log(`[OAuth] Auto-joining world for ${user.login}...`);
-        joinWorld().then(result => {
-          if (result) {
-            console.log(`[OAuth] Joined! Added ${result.addedRepos} repos.`);
-            invalidateWorldCache(); // next fetch gets fresh data
-            trackWorldJoined({ user_login: user.login, added_repos: result.addedRepos });
-          }
-        }).catch(err => console.warn('[OAuth] Auto-join failed:', err?.message || err));
-      }
-    }).catch(err => console.warn('[OAuth] User fetch failed:', err?.message || err));
 
     // Expose for inline scripts (Add Repo modal)
     (window as any).__invalidateWorldCache = invalidateWorldCache;

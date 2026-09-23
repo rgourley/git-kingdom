@@ -89,13 +89,6 @@ export function trackSignInInitiated(): void {
   trackEvent('signin_initiated');
 }
 
-export function trackWorldJoined(params: {
-  user_login: string;
-  added_repos: number;
-}): void {
-  trackEvent('world_joined', params);
-}
-
 export function trackRepoAdded(params: {
   user_login: string;
   repo_full_name: string;

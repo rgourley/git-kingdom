@@ -4,30 +4,10 @@
  */
 import type { KingdomMetrics } from '../types';
 
-export interface AuthUser {
-  login: string;
-  github_id: number;
-  avatar_url: string;
-}
-
 export interface WorldData {
   repos: KingdomMetrics[];
   users: string[];
   updatedAt: string;
-}
-
-/**
- * Check if the user is signed in via GitHub OAuth.
- * Returns user info or null if not signed in.
- */
-export async function fetchCurrentUser(): Promise<AuthUser | null> {
-  try {
-    const res = await fetch('/api/auth/me', { credentials: 'include' });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -153,22 +133,6 @@ async function fetchFullWorld(): Promise<WorldData | null> {
 export function invalidateWorldCache() {
   worldCache = undefined;
   try { localStorage.removeItem(WORLD_CACHE_KEY); } catch { /* noop */ }
-}
-
-/**
- * Tell the server to add the signed-in user's repos to the universal world.
- */
-export async function joinWorld(): Promise<{ ok: boolean; addedRepos: number } | null> {
-  try {
-    const res = await fetch('/api/world/join', {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
 }
 
 export interface UserRepo {

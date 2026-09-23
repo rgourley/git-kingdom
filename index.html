@@ -1144,6 +1144,11 @@
       </div>
       <div id="profile-repos"></div>
       <div id="profile-actions" style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.15);text-align:center;">
+        <div style="font-size:9px;margin-bottom:8px;">
+          <a id="profile-follow" href="https://github.com/rgourley" target="_blank" rel="noopener" style="color:#ffd700;white-space:nowrap;">Follow @rgourley</a>
+          <span style="color:#8a8070;"> · </span>
+          <a id="profile-star" href="https://github.com/rgourley/git-kingdom" target="_blank" rel="noopener" style="color:#ffd700;white-space:nowrap;">★ Star Git Kingdom</a>
+        </div>
         <a id="profile-signout" href="#" style="font-size:9px;color:#c0a070;text-decoration:underline;cursor:pointer;">Sign out</a>
       </div>
     </div>
@@ -1372,6 +1377,13 @@
       }
     });
 
+    // Follow / star links in the profile panel
+    ['profile-follow', 'profile-star'].forEach(function(id) {
+      document.getElementById(id).addEventListener('click', function() {
+        if (typeof window.gtag === 'function') window.gtag('event', id.replace('-', '_') + '_clicked');
+      });
+    });
+
     // Sign out button
     document.getElementById('profile-signout').addEventListener('click', function(e) {
       e.preventDefault();
@@ -1428,7 +1440,7 @@
       return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    function renderProfileRepos(repos, subtitleEl, reposEl) {
+    function renderProfileRepos(repos, subtitleEl, reposEl, note) {
       subtitleEl.textContent = repos.length + ' repo' + (repos.length !== 1 ? 's' : '') + ' in the kingdom';
 
       // Group repos by language
@@ -1480,6 +1492,12 @@
       var refreshDiv = document.createElement('div');
       refreshDiv.style.cssText = 'margin-top:10px;text-align:center;padding-top:8px;border-top:1px solid rgba(255,255,255,0.1)';
       refreshDiv.innerHTML = '<button id="profile-refresh" class="rpgui-button" style="font-size:9px"><p>↻ Refresh repos</p></button>';
+      if (note) {
+        var noteEl = document.createElement('div');
+        noteEl.style.cssText = 'font-size:9px;color:#c8b89a;margin-top:6px';
+        noteEl.textContent = note;
+        refreshDiv.appendChild(noteEl);
+      }
       reposEl.appendChild(refreshDiv);
       document.getElementById('profile-refresh').addEventListener('click', function() {
         claimUserRepos(subtitleEl, reposEl);
@@ -1548,6 +1566,7 @@
 
       var abortController = new AbortController();
       var timedOut = false;
+      var cooldownNote = null;
 
       // 45s timeout — Vercel functions time out at 60s
       var timeout = setTimeout(function() {
@@ -1560,10 +1579,22 @@
       }, 45000);
 
       fetch('/api/world/join', { method: 'POST', credentials: 'include', signal: abortController.signal })
-        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(r) {
+          // 429: the server refreshed these repos recently. Show the stored repos with a note.
+          if (r.status === 429) {
+            return r.json().then(function(body) { return { cooldown: body.retryAfter || 3600 }; });
+          }
+          return r.ok ? r.json() : null;
+        })
         .then(function(joinData) {
           clearTimeout(timeout);
           if (timedOut) return;
+
+          if (joinData && joinData.cooldown) {
+            var mins = Math.max(1, Math.ceil(joinData.cooldown / 60));
+            cooldownNote = 'Refreshed recently. You can refresh again in ' + mins + ' min.';
+            return fetch('/api/user/repos', { credentials: 'include' });
+          }
 
           if (!joinData || !joinData.ok) {
             subtitleEl.textContent = 'Failed to claim repos';
@@ -1592,7 +1623,7 @@
           clearTimeout(timeout);
           if (timedOut) return;
           if (d2 && d2.repos && d2.repos.length > 0) {
-            renderProfileRepos(d2.repos, subtitleEl, reposEl);
+            renderProfileRepos(d2.repos, subtitleEl, reposEl, cooldownNote);
           } else {
             subtitleEl.textContent = 'No eligible repos found';
             reposEl.innerHTML = '<div style="font-size:9px;color:#8a8070;margin-top:8px">' +
