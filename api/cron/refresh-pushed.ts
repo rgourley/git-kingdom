@@ -1,9 +1,9 @@
 /**
  * GET /api/cron/refresh-pushed
  *
- * Lightweight cron that refreshes `pushed_at` for all repos in the DB.
- * Queries GitHub's repos API once per owner (returns pushed_at for all repos),
- * then batch-updates the DB.
+ * Lightweight cron that refreshes `pushed_at`, stars, forks, open issues, and size
+ * for all repos in the DB. It queries GitHub's repos API once per owner.
+ * That one response has all of these fields for each repo of the owner.
  *
  * Designed for Vercel Cron — runs every 6 hours.
  * Also callable manually (admin-only).
@@ -12,6 +12,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createServiceClient } from '../lib/supabase';
 import { getNextToken } from '../lib/github-tokens';
 import { writeEvent } from '../lib/events';
+import { selectAll } from '../lib/select-all';
 
 const GH_API = 'https://api.github.com';
 
@@ -54,15 +55,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = createServiceClient();
 
     // Get all distinct owners from our repos table
-    const { data: repos, error: fetchErr } = await supabase
+    const repos = await selectAll<{
+      id: number; full_name: string; owner_login: string | null; pushed_at: string | null;
+      stargazers: number | null; forks: number | null; open_issues: number | null; size_kb: number | null;
+    }>((from, to) => supabase
       .from('repos')
-      .select('full_name, owner_login, pushed_at, stargazers')
-      .gte('stargazers', 1);
-
-    if (fetchErr || !repos) {
-      console.error('[cron/refresh-pushed] Failed to fetch repos:', fetchErr?.message);
-      return res.status(500).json({ error: 'DB query failed' });
-    }
+      .select('id, full_name, owner_login, pushed_at, stargazers, forks, open_issues, size_kb')
+      .gte('stargazers', 1)
+      .order('id')
+      .range(from, to));
 
     // Group repos by owner
     const byOwner = new Map<string, string[]>();
@@ -98,41 +99,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        // Build a map of full_name → pushed_at from GitHub
-        const ghPushed = new Map<string, string>();
+        // Build a map of full_name → GitHub repo
+        const ghByName = new Map<string, any>();
         for (const r of ghRepos) {
-          if (r.pushed_at) {
-            ghPushed.set(r.full_name.toLowerCase(), r.pushed_at);
-          }
+          if (r.full_name) ghByName.set(r.full_name.toLowerCase(), r);
         }
 
         // Update our DB for matching repos
         for (const fullName of repoNames) {
-          const ghDate = ghPushed.get(fullName.toLowerCase());
-          if (!ghDate) continue;
+          const ghRepo = ghByName.get(fullName.toLowerCase());
+          if (!ghRepo?.pushed_at) continue;
           checked++;
 
-          // Find existing pushed_at for this repo
           const existing = repos.find(r => r.full_name === fullName);
-          if (existing?.pushed_at === ghDate) continue; // no change
+          const next = {
+            pushed_at: ghRepo.pushed_at as string,
+            stargazers: (ghRepo.stargazers_count ?? 0) as number,
+            forks: (ghRepo.forks_count ?? 0) as number,
+            open_issues: (ghRepo.open_issues_count ?? 0) as number,
+            size_kb: (ghRepo.size ?? 0) as number,
+          };
+          // Supabase returns timestamps as "+00:00" and GitHub returns "Z", so compare as times.
+          const pushedChanged = !existing?.pushed_at
+            || new Date(existing.pushed_at).getTime() !== new Date(next.pushed_at).getTime();
+          const statsChanged = existing?.stargazers !== next.stargazers
+            || existing?.forks !== next.forks
+            || existing?.open_issues !== next.open_issues
+            || existing?.size_kb !== next.size_kb;
+          if (!pushedChanged && !statsChanged) continue;
 
           const { error: updateErr } = await supabase
             .from('repos')
-            .update({ pushed_at: ghDate, updated_at: new Date().toISOString() })
+            .update({ ...next, updated_at: new Date().toISOString() })
             .eq('full_name', fullName);
 
           if (updateErr) {
             errors.push(`${fullName}: ${updateErr.message}`);
           } else {
             updated++;
-            console.log(`[cron] Updated pushed_at for ${fullName}: ${ghDate}`);
+            console.log(`[cron] Updated ${fullName}: pushed_at=${next.pushed_at} stars=${next.stargazers}`);
           }
 
-          // Check for building upgrades
-          const ghRepo = ghRepos.find(r => r.full_name?.toLowerCase() === fullName.toLowerCase());
-          if (ghRepo && existing) {
+          // Check for building upgrades. Skip the event if the update failed,
+          // because the next run would then announce the same upgrade again.
+          if (!updateErr && existing) {
             const oldStars = existing.stargazers ?? 0;
-            const newStars = ghRepo.stargazers_count ?? 0;
+            const newStars = next.stargazers;
             const oldRank = getBuildingRank(oldStars);
             const newRank = getBuildingRank(newStars);
             if (oldRank !== newRank && newStars > oldStars) {
@@ -147,7 +159,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
           }
 
-          // Fetch recent commits to populate citizen thoughts
+          // Fetch recent commits to populate citizen thoughts (only when there are new pushes)
+          if (!pushedChanged) continue;
+          if (!existing) continue;
           const commitsRes = await fetch(
             `${GH_API}/repos/${fullName}/commits?per_page=10`,
             { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.v3+json' } }
@@ -165,7 +179,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   .from('contributors')
                   .update({ last_commit_message: msg })
                   .eq('login', author)
-                  .eq('repo_id', fullName);
+                  .eq('repo_id', existing.id);  // contributors.repo_id is the numeric repos.id
               }
             }
           }

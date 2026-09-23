@@ -9,6 +9,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createServiceClient } from './lib/supabase';
+import { selectAll } from './lib/select-all';
 
 function mapRepoRow(r: any) {
   return {
@@ -52,28 +53,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = createServiceClient();
     const since = req.query.since as string | undefined;
 
-    let query = supabase
-      .from('repos')
-      .select('*, contributors(*)')
-      .gte('stargazers', 1)  // Only repos with at least 1 star
-      .order('stargazers', { ascending: false });
+    const repos = await selectAll<any>((from, to) => {
+      let query = supabase
+        .from('repos')
+        .select('*, contributors(*)')
+        .gte('stargazers', 1)  // Only repos with at least 1 star
+        .order('stargazers', { ascending: false })
+        .order('id');
+      // Delta mode: only repos added/updated after the given timestamp
+      if (since) query = query.gt('updated_at', since);
+      return query.range(from, to);
+    });
 
-    // Delta mode: only repos added/updated after the given timestamp
-    if (since) {
-      query = query.gt('updated_at', since);
-    }
-
-    const { data: repos, error } = await query;
-
-    if (error) {
-      console.error('[/api/world] Supabase error:', error.message);
-      return res.status(200).json({ repos: [], users: [], updatedAt: new Date().toISOString() });
-    }
-
-    const metrics = (repos || []).map(mapRepoRow);
+    const metrics = repos.map(mapRepoRow);
 
     // Fetch registered users
-    const { data: users } = await supabase.from('users').select('login');
+    const users = await selectAll<{ login: string }>((from, to) =>
+      supabase.from('users').select('login').order('login').range(from, to));
 
     // Delta queries get short cache (new claims show up fast)
     // Full queries get long cache (bulk data doesn't change often)
@@ -82,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', `public, s-maxage=${maxAge}, stale-while-revalidate=${swr}`);
     res.json({
       repos: metrics,
-      users: (users || []).map((u: any) => u.login),
+      users: users.map(u => u.login),
       updatedAt: new Date().toISOString(),
     });
   } catch (err: any) {
