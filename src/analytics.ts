@@ -109,4 +109,14 @@ export function trackProfilePanelOpened(): void {
   trackEvent('profile_panel_opened');
 }
 
-// TODO: Add trackError() for logging client-side errors to analytics
+// ─── Error tracking ─────────────────────────────────────────
+export function trackError(params: {
+  error_message: string;
+  error_source: string;
+  fatal?: boolean;
+}): void {
+  trackEvent('exception', {
+    description: `${params.error_source}: ${params.error_message}`,
+    fatal: params.fatal ?? false,
+  });
+}

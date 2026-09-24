@@ -42,17 +42,32 @@ function makeMetrics(overrides: Omit<Partial<KingdomMetrics>, 'repo'> & { repo?:
 describe('getBiome', () => {
   it('maps known languages to their biomes', () => {
     expect(getBiome('JavaScript')).toBe('grassland');
+    expect(getBiome('TypeScript')).toBe('grassland');
+    expect(getBiome('Dart')).toBe('grassland');
     expect(getBiome('Python')).toBe('forest');
-    expect(getBiome('Rust')).toBe('volcanic');
+    expect(getBiome('R')).toBe('forest');
+    expect(getBiome('Julia')).toBe('forest');
     expect(getBiome('Go')).toBe('mountain');
+    expect(getBiome('Swift')).toBe('mountain');
+    expect(getBiome('Kotlin')).toBe('mountain');
+    expect(getBiome('Rust')).toBe('volcanic');
+    expect(getBiome('Scala')).toBe('volcanic');
+    expect(getBiome('Erlang')).toBe('volcanic');
     expect(getBiome('Ruby')).toBe('crystal');
+    expect(getBiome('Haskell')).toBe('crystal');
+    expect(getBiome('Elixir')).toBe('crystal');
+    expect(getBiome('Clojure')).toBe('crystal');
     expect(getBiome('Java')).toBe('desert');
+    expect(getBiome('Lua')).toBe('desert');
+    expect(getBiome('Shell')).toBe('desert');
     expect(getBiome('C#')).toBe('tundra');
+    expect(getBiome('F#')).toBe('tundra');
+    expect(getBiome('PowerShell')).toBe('tundra');
   });
 
   it('defaults to grassland for unknown languages', () => {
-    expect(getBiome('Haskell')).toBe('grassland');
     expect(getBiome('Brainfuck')).toBe('grassland');
+    expect(getBiome('COBOL')).toBe('grassland');
     expect(getBiome('')).toBe('grassland');
   });
 });

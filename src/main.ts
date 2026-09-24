@@ -14,12 +14,14 @@ import {
 
 export function getBiome(lang: string): Biome {
   const m: Record<string, Biome> = {
-    JavaScript: 'grassland', TypeScript: 'grassland', Python: 'forest',
-    Rust: 'volcanic', Go: 'mountain', Ruby: 'crystal', Java: 'desert',
-    'C++': 'mountain', C: 'mountain', 'C#': 'tundra', PHP: 'forest',
-    Swift: 'grassland', Kotlin: 'desert', Shell: 'desert',
+    JavaScript: 'grassland', TypeScript: 'grassland', PHP: 'grassland', Dart: 'grassland',
+    Python: 'forest', R: 'forest', Julia: 'forest',
+    Go: 'mountain', 'C++': 'mountain', C: 'mountain', Swift: 'mountain', Kotlin: 'mountain',
+    Rust: 'volcanic', Scala: 'volcanic', Erlang: 'volcanic',
+    Ruby: 'crystal', Haskell: 'crystal', Elixir: 'crystal', Clojure: 'crystal',
+    Java: 'desert', Lua: 'desert', Perl: 'desert', Shell: 'desert',
+    'C#': 'tundra', 'F#': 'tundra', PowerShell: 'tundra',
   };
-  // TODO: Support additional biomes for unlisted languages (e.g. Haskell → tundra, Lua → desert)
   return m[lang] || 'grassland';
 }
 

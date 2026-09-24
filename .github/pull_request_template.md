@@ -1,6 +1,9 @@
 ## What does this PR do?
 
-<!-- A brief description of the changes -->
+<!-- Start from your commit message — it's usually the best summary.
+     Only fall back to the prompts below if you need more structure. -->
+
+<!-- What changed and why? -->
 
 ## Screenshots
 
