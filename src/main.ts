@@ -12,7 +12,7 @@ import {
   trackGitHubLinkClicked, trackSignInInitiated,
 } from './analytics';
 
-function getBiome(lang: string): Biome {
+export function getBiome(lang: string): Biome {
   const m: Record<string, Biome> = {
     JavaScript: 'grassland', TypeScript: 'grassland', Python: 'forest',
     Rust: 'volcanic', Go: 'mountain', Ruby: 'crystal', Java: 'desert',
@@ -29,7 +29,7 @@ function getBiome(lang: string): Biome {
  * even though they're curated markdown/docs, not real software.
  * Keeping them distorts kingdom rankings (e.g. developer-roadmap was TypeScript's #1).
  */
-function isContentRepo(m: KingdomMetrics): boolean {
+export function isContentRepo(m: KingdomMetrics): boolean {
   const name = (m.repo.name || '').toLowerCase();
 
   const contentNamePatterns = [
@@ -52,7 +52,7 @@ function isContentRepo(m: KingdomMetrics): boolean {
   return contentNamePatterns.some(p => p.test(name));
 }
 
-function groupByLanguage(allMetrics: KingdomMetrics[]): LanguageKingdom[] {
+export function groupByLanguage(allMetrics: KingdomMetrics[]): LanguageKingdom[] {
   const groups = new Map<string, KingdomMetrics[]>();
 
   let filtered = 0;

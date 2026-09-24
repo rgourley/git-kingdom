@@ -36,7 +36,7 @@ function stepCityZoom(direction: number): number {
  * Repos pushed 30+ days ago → 0 (no label, hover-only)
  * Smooth ease-out curve so most repos are faded.
  */
-function repoFreshness(pushedAt: string | undefined): number {
+export function repoFreshness(pushedAt: string | undefined): number {
   if (!pushedAt) return 0;
   const ageDays = (Date.now() - new Date(pushedAt).getTime()) / (1000 * 60 * 60 * 24);
   if (ageDays <= 3) return 0.8;       // very fresh — bright

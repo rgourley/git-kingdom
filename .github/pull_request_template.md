@@ -10,4 +10,5 @@
 
 - [ ] `npx tsc --noEmit` passes
 - [ ] `npm run build` succeeds
+- [ ] Tests pass (`npm test`)
 - [ ] Tested locally in browser
