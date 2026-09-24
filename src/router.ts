@@ -7,21 +7,8 @@
  *   /facebook/react      → Enter city containing facebook/react, focus that building
  */
 
-// TODO: Load reserved paths from a shared config or validate against GitHub's reserved usernames
-// Paths that should NOT be interpreted as username routes
-const RESERVED_PATHS = new Set([
-  'editor.html',
-  'assets',
-  'data',
-  'api',
-  'about',
-  'privacy',
-  'changelog',
-  'how-it-works',
-  'faq',
-  'admin',
-  'citizen',
-]);
+import { RESERVED_PATHS } from './constants';
+
 
 export interface Route {
   /** GitHub username whose repos to highlight (null = no highlight) */

@@ -51,7 +51,7 @@ export async function signOut() {
  */
 let worldCache: WorldData | null | undefined;
 export async function fetchUniversalWorld(): Promise<WorldData | null> {
-  if (worldCache !== undefined) return worldCache;
+  if (worldCache !== undefined && Date.now() - worldCacheTime < CACHE_TTL_MS) return worldCache;
   try {
     // 1. Load pre-baked JSON (fast, static, cached by browser)
     const jsonRes = await fetch('/data/default-world.json');
@@ -89,6 +89,7 @@ export async function fetchUniversalWorld(): Promise<WorldData | null> {
     }
 
     worldCache = base;
+    worldCacheTime = Date.now();
     return base;
   } catch {
     // JSON fetch failed — try full Supabase fetch
@@ -100,18 +101,22 @@ export async function fetchUniversalWorld(): Promise<WorldData | null> {
 async function fetchFullWorld(): Promise<WorldData | null> {
   try {
     const res = await fetch('/api/world');
-    if (!res.ok) { worldCache = null; return null; }
+    if (!res.ok) { worldCache = null; worldCacheTime = 0; return null; }
     worldCache = (await res.json()) as WorldData;
+    worldCacheTime = Date.now();
     return worldCache ?? null;
   } catch {
     worldCache = null;
+    worldCacheTime = 0;
     return null;
   }
 }
 
-// TODO: Add cache expiry (e.g. 5 minutes) so long-lived tabs eventually refresh
+const CACHE_TTL_MS = 5 * 60 * 1000;
+let worldCacheTime = 0;
+
 /** Clear the memoized world cache (call after join to get fresh data) */
-export function invalidateWorldCache() { worldCache = undefined; }
+export function invalidateWorldCache() { worldCache = undefined; worldCacheTime = 0; }
 
 /**
  * Tell the server to add the signed-in user's repos to the universal world.

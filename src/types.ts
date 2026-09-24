@@ -89,7 +89,7 @@ export interface LanguageKingdom {
   totalStars: number;      // sum across all repos
 }
 
-// TODO: Remove deprecated Kingdom type once all references are cleaned up
+// Still used by KingdomGenerator and WorldScene — remove once city-builder model fully replaces it
 export interface Kingdom {
   metrics: KingdomMetrics;
   tier: SettlementTier;
